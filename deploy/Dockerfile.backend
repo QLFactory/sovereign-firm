@@ -20,7 +20,9 @@ RUN go build -o /bin/worker ./cmd/worker/main.go
 FROM alpine:latest
 
 WORKDIR /app
-RUN apk --no-cache add ca-certificates
+
+# Install Node.js for TestRunner activity (runs Vitest tests)
+RUN apk --no-cache add ca-certificates nodejs npm
 
 # Copy Binaries
 COPY --from=builder /bin/orchestrator /app/orchestrator

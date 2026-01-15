@@ -62,6 +62,10 @@ func main() {
 
 	qaAgent := activities.NewQAAgent()
 	w.RegisterActivityWithOptions(qaAgent.GenerateTests, activity.RegisterOptions{Name: "QAAgentGenerateTests"})
+	w.RegisterActivityWithOptions(qaAgent.RegenerateTests, activity.RegisterOptions{Name: "QAAgentRegenerateTests"})
+
+	testRunner := activities.NewTestRunner()
+	w.RegisterActivityWithOptions(testRunner.RunTests, activity.RegisterOptions{Name: "RunTests"})
 
 	log.Println("Worker started...")
 	err = w.Run(worker.InterruptCh())
