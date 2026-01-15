@@ -1,6 +1,11 @@
 #!/bin/bash
 echo "🚀 Building and deploying Sovereign Firm (Production Grade)..."
 
+# Load .env variables if present
+if [ -f .env ]; then
+  export $(cat .env | xargs)
+fi
+
 # Ensure Ollama vars are present
 if [ -z "$OLLAMA_HOST" ]; then
     echo "⚠️  OLLAMA_HOST not set. Defaulting to http://host.docker.internal:11434"

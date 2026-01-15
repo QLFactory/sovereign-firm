@@ -75,7 +75,7 @@ func checkChroma() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := c.SimilaritySearch(ctx, []float64{0.1, 0.2}, 1)
+	_, err := c.SimilaritySearch(ctx, []float32{0.1, 0.2}, 1)
 
 	if err != nil {
 		fmt.Printf("❌ Failed: %v\n", err)

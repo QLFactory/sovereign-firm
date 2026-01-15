@@ -102,6 +102,31 @@ func ProjectLifecycle(ctx workflow.Context, input interface{}) (*ProjectState, e
 		}
 
 		state.CodeFiles = codeBundle
+
+		// Trigger QA Agent
+		var testBundle map[string]string
+
+		specToUse := state.Spec
+		if specToUse == "" {
+			specToUse = state.ChatHistory
+		}
+
+		qaInput := map[string]interface{}{
+			"spec":       specToUse,
+			"code_files": state.CodeFiles,
+		}
+		aoQA := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 2,
+		}
+		ctxQA := workflow.WithActivityOptions(ctx, aoQA)
+		if err := workflow.ExecuteActivity(ctxQA, "QAAgentGenerateTests", qaInput).Get(ctx, &testBundle); err != nil {
+			logger.Error("QA Agent failed", "Error", err)
+		} else {
+			for k, v := range testBundle {
+				state.CodeFiles[k] = v
+			}
+		}
+
 		state.Phase = "REVIEW"
 		// Wait for feedback
 		var signal UserMessageSignal

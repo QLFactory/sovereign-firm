@@ -6,6 +6,7 @@ import {
   SandpackLayout,
   SandpackCodeEditor,
   SandpackPreview,
+  SandpackTests,
   SandpackFileExplorer,
 } from "@codesandbox/sandpack-react";
 
@@ -16,11 +17,12 @@ export default function PodConsole() {
   const [status, setStatus] = useState("Idle");
 
   const [activeTab, setActiveTab] = useState<"CHAT" | "SPEC">("CHAT");
+  const [rightTab, setRightTab] = useState<"PREVIEW" | "TESTS">("PREVIEW");
   const [projectSpec, setProjectSpec] = useState("");
 
   // Default files
   const [files, setFiles] = useState<any>({
-    "/App.js": `import React from 'react';
+    "/src/App.js": `import React from 'react';
 
 export default function App() {
   return (
@@ -30,7 +32,7 @@ export default function App() {
     </div>
   );
 }`,
-    "/index.js": `import React from 'react';
+    "/src/index.js": `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
@@ -40,6 +42,17 @@ root.render(
     <App />
   </React.StrictMode>
 );`,
+    "/package.json": JSON.stringify({
+      dependencies: {
+        "react": "^18.0.0",
+        "react-dom": "^18.0.0",
+        "react-scripts": "^5.0.0",
+        "@testing-library/react": "^14.0.0",
+        "@testing-library/jest-dom": "^5.16.5",
+        "jest": "^29.5.0"
+      },
+      main: "/src/index.js",
+    }, null, 2),
   });
 
   useEffect(() => {
@@ -180,11 +193,33 @@ root.render(
           template="react"
           theme="dark"
           files={files || {}}
+          customSetup={{
+            dependencies: {
+              "react": "^18.2.0",
+              "react-dom": "^18.2.0",
+              "@testing-library/react": "^14.0.0",
+              "@testing-library/jest-dom": "^5.16.5",
+              "jest": "^29.5.0"
+            }
+          }}
+          options={{
+            externalResources: [],
+          }}
         >
+
           <SandpackLayout className="!h-screen !border-none">
             <SandpackFileExplorer />
             <SandpackCodeEditor showLineNumbers />
-            <SandpackPreview />
+            <div className="flex-1 flex flex-col h-full border-l border-zinc-800 bg-zinc-950">
+              <div className="flex text-xs font-bold border-b border-zinc-800">
+                <button onClick={() => setRightTab("PREVIEW")} className={`flex-1 p-2 ${rightTab === "PREVIEW" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Preview</button>
+                <button onClick={() => setRightTab("TESTS")} className={`flex-1 p-2 ${rightTab === "TESTS" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>Tests</button>
+              </div>
+              <div className="flex-1 relative">
+                <SandpackPreview style={{ display: rightTab === "PREVIEW" ? 'block' : 'none', height: '100%' }} />
+                <SandpackTests style={{ display: rightTab === "TESTS" ? 'block' : 'none', height: '100%', background: '#18181b' }} />
+              </div>
+            </div>
           </SandpackLayout>
         </SandpackProvider>
       </div>

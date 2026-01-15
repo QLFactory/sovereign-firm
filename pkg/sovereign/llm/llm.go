@@ -24,5 +24,8 @@ type Client interface {
 	Generate(ctx context.Context, req GenerateRequest) (*GenerateResponse, error)
 
 	// Embed returns vector embeddings (for RAG)
-	Embed(ctx context.Context, text string) ([]float64, error)
+	Embed(ctx context.Context, text string) ([]float32, error)
+
+	// Ping checks if the LLM service is available
+	Ping(ctx context.Context) error
 }

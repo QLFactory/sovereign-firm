@@ -77,7 +77,7 @@ func (c *OllamaClient) Generate(ctx context.Context, req GenerateRequest) (*Gene
 }
 
 // Embed calls POST /api/embeddings
-func (c *OllamaClient) Embed(ctx context.Context, text string) ([]float64, error) {
+func (c *OllamaClient) Embed(ctx context.Context, text string) ([]float32, error) {
 	reqBody := map[string]interface{}{
 		"model":  c.EmbedModel,
 		"prompt": text,
@@ -113,7 +113,13 @@ func (c *OllamaClient) Embed(ctx context.Context, text string) ([]float64, error
 		return nil, err
 	}
 
-	return embedResp.Embedding, nil
+	// Convert float64 to float32
+	result := make([]float32, len(embedResp.Embedding))
+	for i, v := range embedResp.Embedding {
+		result[i] = float32(v)
+	}
+
+	return result, nil
 }
 
 // Ping checks if the Ollama service is reachable

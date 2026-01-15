@@ -15,7 +15,7 @@ type PMAgent struct {
 }
 
 func NewPMAgent() *PMAgent {
-	llmClient := llm.NewOllamaClient()
+	llmClient := llm.NewClient()
 	return &PMAgent{
 		llmClient: llmClient,
 		store:     memory.NewChromaClient(llmClient),

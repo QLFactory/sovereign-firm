@@ -63,11 +63,17 @@ services:
     command: [ "/app/orchestrator" ]
     environment:
       - TEMPORAL_HOST=temporal:7233
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434} # Access host Ollama
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
       - CHROMA_HOST=http://chroma:8000
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4}
+      - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-ada-002}
     ports:
       - "8080:8080"
+    restart: on-failure
     depends_on:
       - temporal
       - chroma
@@ -84,6 +90,12 @@ services:
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
       - CHROMA_HOST=http://chroma:8000
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4}
+      - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-ada-002}
+    restart: on-failure
     depends_on:
       - temporal
       - orchestrator
@@ -98,6 +110,7 @@ services:
       - API_URL=http://orchestrator:8080
     ports:
       - "3000:3000"
+    restart: on-failure
     networks:
       - sovereign-net
     depends_on:

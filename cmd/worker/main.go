@@ -23,13 +23,13 @@ func main() {
 	}
 
 	// Verify LLM Connectivity (Fail Fast)
-	llmClient := llm.NewOllamaClient()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	llmClient := llm.NewClient()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := llmClient.Ping(ctx); err != nil {
-		log.Fatalf("CRITICAL: Cannot connect to Ollama at %s: %v", llmClient.BaseURL, err)
+		log.Fatalf("CRITICAL: Cannot connect to LLM: %v", err)
 	}
-	log.Println("✅ Connected to Ollama")
+	log.Println("✅ Connected to LLM")
 
 	temporalHost := os.Getenv("TEMPORAL_HOST")
 	if temporalHost == "" {
@@ -59,6 +59,9 @@ func main() {
 	devAgent := activities.NewDevAgent()
 	w.RegisterActivityWithOptions(devAgent.GenerateCode, activity.RegisterOptions{Name: "DevAgentGenerate"})
 	w.RegisterActivityWithOptions(devAgent.RefineCode, activity.RegisterOptions{Name: "DevAgentRefine"})
+
+	qaAgent := activities.NewQAAgent()
+	w.RegisterActivityWithOptions(qaAgent.GenerateTests, activity.RegisterOptions{Name: "QAAgentGenerateTests"})
 
 	log.Println("Worker started...")
 	err = w.Run(worker.InterruptCh())

@@ -23,8 +23,8 @@ type Indexer struct {
 }
 
 func NewIndexer() *Indexer {
-	// Initialize with ChromaClient (which uses Ollama for embeddings)
-	embedder := llm.NewOllamaClient()
+	// Initialize with ChromaClient (which uses configurable LLM for embeddings)
+	embedder := llm.NewClient()
 	store := memory.NewChromaClient(embedder)
 	return &Indexer{store: store}
 }

@@ -44,7 +44,7 @@ func (c *ChromaClient) AddDocuments(ctx context.Context, docs []Document) error 
 	// 2. Prepare payload
 	payload := map[string]interface{}{
 		"ids":        make([]string, len(docs)),
-		"embeddings": make([][]float64, len(docs)),
+		"embeddings": make([][]float32, len(docs)),
 		"documents":  make([]string, len(docs)),
 		"metadatas":  make([]map[string]interface{}, len(docs)),
 	}
@@ -60,7 +60,7 @@ func (c *ChromaClient) AddDocuments(ctx context.Context, docs []Document) error 
 		}
 
 		payload["ids"].([]string)[i] = doc.ID
-		payload["embeddings"].([][]float64)[i] = doc.Vector
+		payload["embeddings"].([][]float32)[i] = doc.Vector
 		payload["documents"].([]string)[i] = doc.Content
 		payload["metadatas"].([]map[string]interface{})[i] = doc.Metadata
 	}
@@ -69,14 +69,14 @@ func (c *ChromaClient) AddDocuments(ctx context.Context, docs []Document) error 
 	return c.postJSON(ctx, "/api/v1/collections/"+collID+"/add", payload, nil)
 }
 
-func (c *ChromaClient) SimilaritySearch(ctx context.Context, vector []float64, limit int) ([]Document, error) {
+func (c *ChromaClient) SimilaritySearch(ctx context.Context, vector []float32, limit int) ([]Document, error) {
 	collID, err := c.getOrCreateCollection(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	payload := map[string]interface{}{
-		"query_embeddings": [][]float64{vector},
+		"query_embeddings": [][]float32{vector},
 		"n_results":        limit,
 	}
 
