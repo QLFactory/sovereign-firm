@@ -12,7 +12,7 @@
 | Phase | Status | Progress | Start Date | End Date |
 |-------|--------|----------|------------|----------|
 | Phase 0: Foundation | 🟢 Complete | 100% | 2026-01-15 | 2026-01-15 |
-| Phase 1: Agent Core | 🟡 In Progress | 88% | 2026-01-15 | - |
+| Phase 1: Agent Core | 🟢 Complete | 100% | 2026-01-15 | 2026-01-15 |
 | Phase 2: Execution Layer | 🔴 Not Started | 0% | - | - |
 | Phase 3: Intelligence Layer | 🔴 Not Started | 0% | - | - |
 | Phase 4: Multi-Agent | 🔴 Not Started | 0% | - | - |
@@ -85,7 +85,7 @@
 | 1.5 | Create 5 core skills | 🟢 | AI | skills/{react,backend,qa,pm,architect}/*.yaml |
 | 1.6 | Implement SOC (Structured Output Contracts) | 🟢 | AI | pkg/agent/soc.go - Schema validation |
 | 1.7 | Add SOC retry logic | 🟢 | AI | ValidateAndRetry with error feedback |
-| 1.8 | Integrate MCP protocol for tools | 🔴 | - | Tool standardization |
+| 1.8 | Integrate MCP protocol for tools | 🟢 | AI | pkg/mcp/* - Tools, registry, executor |
 
 ### Testing Requirements
 
