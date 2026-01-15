@@ -8,6 +8,27 @@ interface WebContainerPreviewProps {
   onTerminalOutput?: (line: string) => void;
 }
 
+// Singleton WebContainer instance - can only boot once per page
+let webcontainerInstance: WebContainer | null = null;
+let bootPromise: Promise<WebContainer> | null = null;
+
+async function getWebContainer(): Promise<WebContainer> {
+  if (webcontainerInstance) {
+    return webcontainerInstance;
+  }
+
+  if (bootPromise) {
+    return bootPromise;
+  }
+
+  bootPromise = WebContainer.boot().then((instance) => {
+    webcontainerInstance = instance;
+    return instance;
+  });
+
+  return bootPromise;
+}
+
 // Convert flat file paths to WebContainer's nested file structure
 function convertToWebContainerFiles(files: Record<string, string>) {
   const result: Record<string, any> = {};
@@ -138,7 +159,7 @@ export default function WebContainerPreview({
     [onTerminalOutput]
   );
 
-  // Boot WebContainer once
+  // Boot WebContainer once (uses singleton)
   useEffect(() => {
     if (isBootingRef.current || containerRef.current) return;
     isBootingRef.current = true;
@@ -148,7 +169,7 @@ export default function WebContainerPreview({
         setStatus("Booting WebContainer...");
         log("Booting WebContainer...");
 
-        const container = await WebContainer.boot();
+        const container = await getWebContainer();
         containerRef.current = container;
 
         // Listen for server-ready event
@@ -178,7 +199,7 @@ export default function WebContainerPreview({
     boot();
 
     return () => {
-      // WebContainer doesn't have a destroy method, it persists for the session
+      // WebContainer persists as singleton for the page session
     };
   }, [log]);
 
