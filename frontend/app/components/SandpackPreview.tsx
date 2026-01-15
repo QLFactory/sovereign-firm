@@ -144,6 +144,7 @@ export default function SandpackPreview({
     );
   }
 
+  // Editor-only mode - no Sandpack preview (WebContainers handles preview)
   return (
     <SandpackProvider
       template="react"
@@ -155,7 +156,8 @@ export default function SandpackPreview({
           (f) => !f.includes("package.json") && !f.includes("vite.config")
         ),
         recompileMode: "delayed",
-        recompileDelay: 300,
+        recompileDelay: 1000,
+        bundlerTimeOut: 5000,
       }}
     >
       <SandpackLayout
@@ -174,34 +176,16 @@ export default function SandpackPreview({
             }}
           />
         )}
-        {showEditor && (
-          <SandpackCodeEditor
-            style={{
-              height: "100%",
-              minWidth: "300px",
-            }}
-            showLineNumbers
-            showTabs
-            closableTabs
-            wrapContent
-          />
-        )}
-        <SandpackPreviewPane
+        <SandpackCodeEditor
           style={{
             height: "100%",
             flex: 1,
           }}
-          showNavigator
-          showRefreshButton
-          showOpenInCodeSandbox={false}
+          showLineNumbers
+          showTabs
+          closableTabs
+          wrapContent
         />
-        {showConsole && (
-          <SandpackConsole
-            style={{
-              height: "150px",
-            }}
-          />
-        )}
       </SandpackLayout>
     </SandpackProvider>
   );
