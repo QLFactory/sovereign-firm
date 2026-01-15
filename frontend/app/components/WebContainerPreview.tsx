@@ -184,7 +184,7 @@ export default function WebContainerPreview({
     log("\n🧪 Running tests...\n");
 
     try {
-      const testProcess = await container.spawn("npm", ["test", "--", "--watchAll=false"]);
+      const testProcess = await container.spawn("npm", ["test"]);
 
       let output = "";
       testProcess.output.pipeTo(
