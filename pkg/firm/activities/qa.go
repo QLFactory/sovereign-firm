@@ -36,16 +36,18 @@ Output ONLY valid JSON.
 The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.test.jsx") and values are the file content.
 Do not include markdown backticks.
 
-RULES:
+CRITICAL RULES:
 1. Use Vitest imports: import { describe, it, expect } from 'vitest';
 2. Use Testing Library: import { render, screen, fireEvent } from '@testing-library/react';
 3. Use jest-dom matchers: import '@testing-library/jest-dom';
 4. IMPORTANT: Read the actual component code carefully - test what's actually rendered, not what you assume.
 5. Look at the actual text, classNames, and element types in the components.
-6. Only write tests for components that exist in the input code.
-7. Return ONLY valid JSON.
-8. Use .jsx extension for test files (e.g., '/src/App.test.jsx').
-9. Keep tests simple - test that components render and basic interactions work.
+6. **ONLY generate test files for components that ACTUALLY EXIST in the provided file list.**
+7. **DO NOT assume separate component files exist. Check the EXISTING FILES list below.**
+8. **If a component is defined INSIDE App.jsx, test it via App.jsx - do NOT create a separate test file for it.**
+9. Return ONLY valid JSON.
+10. Use .jsx extension for test files (e.g., '/src/App.test.jsx').
+11. Keep tests simple - test that components render and basic interactions work.
 
 EXAMPLE TEST STRUCTURE:
 import { describe, it, expect } from 'vitest';
@@ -61,12 +63,18 @@ describe('App', () => {
 });
 `
 
-	codeContext := "APPLICATION CODE:\n"
+	// Build list of existing files for the prompt
+	fileList := "EXISTING FILES (ONLY test these files):\n"
+	for name := range req.CodeFiles {
+		fileList += fmt.Sprintf("- %s\n", name)
+	}
+
+	codeContext := "\nAPPLICATION CODE:\n"
 	for name, content := range req.CodeFiles {
 		codeContext += fmt.Sprintf("File: %s\n```\n%s\n```\n", name, content)
 	}
 
-	prompt := fmt.Sprintf("%s\n\nSPECIFICATION:\n%s\n\nGenerate the JSON of test files now.", codeContext, req.Spec)
+	prompt := fmt.Sprintf("%s\n%s\n\nSPECIFICATION:\n%s\n\nGenerate test files ONLY for the files listed above. Do NOT create tests for files that don't exist.", fileList, codeContext, req.Spec)
 
 	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
 		Prompt: prompt,
