@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+
+// localStorage key for persisting workflow ID
+const WORKFLOW_STORAGE_KEY = "sovereign-firm-workflow-id";
 import {
   useStreaming,
   StreamEvent,
@@ -49,8 +53,12 @@ const phaseColors: Record<string, string> = {
 };
 
 export default function PodConsole() {
-  // Workflow state
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Workflow state - initialize from URL or localStorage
   const [workflowID, setWorkflowID] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [chatHistory, setChatHistory] = useState<string>("");
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Initializing...");
@@ -67,6 +75,48 @@ export default function PodConsole() {
   // Streaming state
   const fileBuffersRef = useRef<Record<string, string[]>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize workflow ID from URL param or localStorage
+  useEffect(() => {
+    if (isInitialized) return;
+
+    const urlWorkflowId = searchParams.get("workflow");
+    const storedWorkflowId = typeof window !== "undefined"
+      ? localStorage.getItem(WORKFLOW_STORAGE_KEY)
+      : null;
+
+    if (urlWorkflowId) {
+      // URL param takes priority
+      setWorkflowID(urlWorkflowId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(WORKFLOW_STORAGE_KEY, urlWorkflowId);
+      }
+      setStatus("Reconnecting to workflow...");
+    } else if (storedWorkflowId) {
+      // Fall back to localStorage
+      setWorkflowID(storedWorkflowId);
+      setStatus("Reconnecting to workflow...");
+    }
+
+    setIsInitialized(true);
+  }, [searchParams, isInitialized]);
+
+  // Persist workflow ID to localStorage and URL when it changes
+  useEffect(() => {
+    if (!workflowID || !isInitialized) return;
+
+    // Save to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem(WORKFLOW_STORAGE_KEY, workflowID);
+    }
+
+    // Update URL without navigation
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get("workflow") !== workflowID) {
+      currentUrl.searchParams.set("workflow", workflowID);
+      router.replace(currentUrl.pathname + currentUrl.search, { scroll: false });
+    }
+  }, [workflowID, isInitialized, router]);
 
   // Terminal output helper
   const addTerminalLine = useCallback((line: string) => {
@@ -148,9 +198,41 @@ export default function PodConsole() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
 
-  // Start workflow on mount
+  // Start or reconnect to workflow after initialization
   useEffect(() => {
-    async function startPod() {
+    if (!isInitialized) return;
+
+    async function verifyOrStartPod() {
+      // If we have a workflow ID, verify it's still valid
+      if (workflowID) {
+        try {
+          addTerminalLine(`🔄 Reconnecting to workflow: ${workflowID}...`);
+          const res = await fetch(`/api/pods/${workflowID}`);
+          if (res.ok) {
+            const state = await res.json();
+            setStatus("PM Agent Active");
+            addTerminalLine(`✅ Reconnected to workflow: ${workflowID}`);
+            // State will be populated by the polling useEffect
+            return;
+          } else {
+            // Workflow not found, clear stored ID and create new
+            addTerminalLine(`⚠️ Workflow not found, starting new pod...`);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem(WORKFLOW_STORAGE_KEY);
+            }
+            setWorkflowID(null);
+          }
+        } catch (err) {
+          console.error("Failed to verify workflow:", err);
+          addTerminalLine(`⚠️ Could not verify workflow, starting new pod...`);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(WORKFLOW_STORAGE_KEY);
+          }
+          setWorkflowID(null);
+        }
+      }
+
+      // No valid workflow ID, create new pod
       try {
         setStatus("Starting Pod...");
         addTerminalLine("🚀 Starting new project pod...");
@@ -179,8 +261,8 @@ export default function PodConsole() {
       }
     }
 
-    if (!workflowID) startPod();
-  }, [workflowID, addTerminalLine]);
+    verifyOrStartPod();
+  }, [isInitialized]); // Only run once after initialization
 
   // Poll for workflow updates
   useEffect(() => {
@@ -261,14 +343,57 @@ export default function PodConsole() {
     }
   };
 
-  // Retry workflow start
-  const retryStart = async () => {
+  // Start a new pod (clears current workflow)
+  const startNewPod = async () => {
+    // Clear localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(WORKFLOW_STORAGE_KEY);
+    }
+
+    // Clear URL param
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("workflow");
+    router.replace(currentUrl.pathname + currentUrl.search, { scroll: false });
+
+    // Reset state
     setWorkflowID(null);
     setFiles({});
     setChatHistory("");
-    setStatus("Retrying...");
+    setProjectSpec("");
+    setCurrentPhase("DISCOVERY");
+    setSelectedFile(null);
     setTerminalOutput([]);
+    setStatus("Starting new pod...");
+    fileBuffersRef.current = {};
+
+    // Create new pod
+    try {
+      addTerminalLine("🚀 Starting new project pod...");
+      const projectId = `project-${Date.now().toString(36)}`;
+
+      const res = await fetch("/api/pods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_name: projectId }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to start pod: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setWorkflowID(data.workflow_id);
+      setStatus("PM Agent Active");
+      addTerminalLine(`✅ Pod started: ${data.workflow_id}`);
+    } catch (err) {
+      console.error(err);
+      setStatus("Error Starting Pod");
+      addTerminalLine(`❌ Failed to start pod: ${err}`);
+    }
   };
+
+  // Retry workflow start (alias for startNewPod)
+  const retryStart = startNewPod;
 
   // Get file list for sidebar
   const fileList = Object.keys(files).sort((a, b) => {
@@ -343,14 +468,23 @@ export default function PodConsole() {
                 </span>
               </div>
             </div>
-            {status.includes("Error") && (
+            <div className="flex gap-2">
+              {status.includes("Error") && (
+                <button
+                  onClick={retryStart}
+                  className="text-xs bg-red-900 px-3 py-1 rounded hover:bg-red-800"
+                >
+                  Retry
+                </button>
+              )}
               <button
-                onClick={retryStart}
-                className="text-xs bg-red-900 px-3 py-1 rounded hover:bg-red-800"
+                onClick={startNewPod}
+                className="text-xs bg-zinc-700 px-3 py-1 rounded hover:bg-zinc-600"
+                title="Start a new project pod"
               >
-                Retry
+                + New Pod
               </button>
-            )}
+            </div>
           </div>
 
           {/* Tabs */}
