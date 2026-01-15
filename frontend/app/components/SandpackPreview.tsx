@@ -20,21 +20,20 @@ interface SandpackPreviewProps {
 }
 
 // Convert our file format to Sandpack format
-function convertToSandpackFiles(files: Record<string, string>): Record<string, string> {
-  const sandpackFiles: Record<string, string> = {};
+function convertToSandpackFiles(files: Record<string, string>): Record<string, { code: string; active?: boolean }> {
+  const sandpackFiles: Record<string, { code: string; active?: boolean }> = {};
 
   for (const [path, content] of Object.entries(files)) {
-    // Sandpack uses paths without leading slash for some files
+    // Sandpack requires paths with leading slash
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    sandpackFiles[normalizedPath] = content;
+    sandpackFiles[normalizedPath] = { code: content };
   }
 
   return sandpackFiles;
 }
 
-// Default files for empty state
-const defaultFiles: Record<string, string> = {
-  "/src/App.jsx": `export default function App() {
+// Default App.jsx for empty state
+const DEFAULT_APP = `export default function App() {
   return (
     <div style={{
       fontFamily: 'system-ui, sans-serif',
@@ -57,31 +56,7 @@ const defaultFiles: Record<string, string> = {
       </p>
     </div>
   );
-}`,
-  "/src/main.jsx": `import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App';
-
-const root = createRoot(document.getElementById('root'));
-root.render(<App />);`,
-  "/index.html": `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sovereign Preview</title>
-</head>
-<body style="margin: 0; padding: 0;">
-  <div id="root"></div>
-</body>
-</html>`,
-  "/package.json": JSON.stringify({
-    dependencies: {
-      react: "^18.2.0",
-      "react-dom": "^18.2.0",
-    },
-  }, null, 2),
-};
+}`;
 
 export default function SandpackPreview({
   files,
@@ -91,30 +66,83 @@ export default function SandpackPreview({
   showEditor = true,
   theme = "dark",
 }: SandpackPreviewProps) {
-  // Merge default files with provided files
+  // Build Sandpack files with proper format
   const sandpackFiles = useMemo(() => {
+    // Check if we have any App file
     const hasAppFile = Object.keys(files).some(
       (f) => f.includes("App.jsx") || f.includes("App.tsx") || f.includes("App.js")
     );
 
+    // If no files or no App file, use default
     if (!hasAppFile || Object.keys(files).length === 0) {
-      return convertToSandpackFiles(defaultFiles);
+      return {
+        "/App.js": { code: DEFAULT_APP, active: true },
+      };
     }
 
-    // Ensure we have required files
-    const merged = { ...defaultFiles, ...files };
-    return convertToSandpackFiles(merged);
+    // Convert provided files to Sandpack format
+    const converted = convertToSandpackFiles(files);
+
+    // Find the main entry file and mark it active
+    const appFileKey = Object.keys(converted).find(
+      (f) => f.includes("App.jsx") || f.includes("App.tsx") || f.includes("App.js")
+    );
+
+    if (appFileKey) {
+      converted[appFileKey] = { ...converted[appFileKey], active: true };
+    }
+
+    return converted;
   }, [files]);
 
-  // Determine active file
+  // Determine active file for editor
   const visibleFile = useMemo(() => {
-    if (activeFile) return activeFile;
+    if (activeFile) {
+      const normalized = activeFile.startsWith("/") ? activeFile : `/${activeFile}`;
+      return normalized;
+    }
     // Find the main App file
     const appFile = Object.keys(sandpackFiles).find(
       (f) => f.includes("App.jsx") || f.includes("App.tsx") || f.includes("App.js")
     );
-    return appFile || "/src/App.jsx";
+    return appFile || "/App.js";
   }, [activeFile, sandpackFiles]);
+
+  // For preview-only mode, render just the preview without layout wrapper
+  if (!showEditor && !showFileExplorer) {
+    return (
+      <SandpackProvider
+        template="react"
+        theme={theme === "dark" ? "dark" : "light"}
+        files={sandpackFiles}
+        options={{
+          activeFile: visibleFile,
+          recompileMode: "delayed",
+          recompileDelay: 300,
+        }}
+      >
+        <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}>
+          <SandpackPreviewPane
+            style={{
+              height: "100%",
+              width: "100%",
+              flex: 1,
+            }}
+            showNavigator
+            showRefreshButton
+            showOpenInCodeSandbox={false}
+          />
+          {showConsole && (
+            <SandpackConsole
+              style={{
+                height: "150px",
+              }}
+            />
+          )}
+        </div>
+      </SandpackProvider>
+    );
+  }
 
   return (
     <SandpackProvider
@@ -127,13 +155,7 @@ export default function SandpackPreview({
           (f) => !f.includes("package.json") && !f.includes("vite.config")
         ),
         recompileMode: "delayed",
-        recompileDelay: 500,
-      }}
-      customSetup={{
-        dependencies: {
-          react: "^18.2.0",
-          "react-dom": "^18.2.0",
-        },
+        recompileDelay: 300,
       }}
     >
       <SandpackLayout
