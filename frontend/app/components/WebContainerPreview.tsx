@@ -2,10 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { WebContainer } from "@webcontainer/api";
+import FileBrowser from "./FileBrowser";
+import CodeEditor from "./CodeEditor";
+
+type TabType = "preview" | "files" | "console";
 
 interface WebContainerPreviewProps {
   files: Record<string, string>;
   onTerminalOutput?: (line: string) => void;
+  onFilesChange?: (files: Record<string, string>) => void;
 }
 
 // Singleton WebContainer instance - can only boot once per page
@@ -154,6 +159,7 @@ const defaultAppJsx = `export default function App() {
 export default function WebContainerPreview({
   files,
   onTerminalOutput,
+  onFilesChange,
 }: WebContainerPreviewProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("Initializing...");
@@ -161,18 +167,76 @@ export default function WebContainerPreview({
   const [isReady, setIsReady] = useState(false);
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [testResults, setTestResults] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>("preview");
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [localFiles, setLocalFiles] = useState<Record<string, string>>(files);
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const containerRef = useRef<WebContainer | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const consoleRef = useRef<HTMLDivElement>(null);
   const isBootingRef = useRef(false);
   const lastFilesRef = useRef<string>("");
+
+  // Sync local files with props
+  useEffect(() => {
+    setLocalFiles(files);
+  }, [files]);
 
   const log = useCallback(
     (message: string) => {
       console.log(`[WebContainer] ${message}`);
       onTerminalOutput?.(message);
+      setConsoleOutput((prev) => [...prev.slice(-500), message]); // Keep last 500 lines
     },
     [onTerminalOutput]
   );
+
+  // Auto-scroll console
+  useEffect(() => {
+    if (consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    }
+  }, [consoleOutput]);
+
+  // Handle file selection
+  const handleSelectFile = useCallback((path: string) => {
+    setSelectedFile(path);
+    setActiveTab("files");
+  }, []);
+
+  // Handle file content change
+  const handleFileChange = useCallback((content: string) => {
+    if (!selectedFile) return;
+    setLocalFiles((prev) => ({
+      ...prev,
+      [selectedFile]: content,
+    }));
+  }, [selectedFile]);
+
+  // Save file to WebContainer
+  const handleFileSave = useCallback(async () => {
+    if (!selectedFile || !containerRef.current) return;
+
+    const content = localFiles[selectedFile];
+    if (!content) return;
+
+    try {
+      const normalizedPath = selectedFile.startsWith("/") ? selectedFile.slice(1) : selectedFile;
+      await containerRef.current.fs.writeFile(normalizedPath, content);
+      log(`Saved: ${selectedFile}`);
+      onFilesChange?.(localFiles);
+    } catch (err: any) {
+      log(`Error saving file: ${err.message}`);
+    }
+  }, [selectedFile, localFiles, log, onFilesChange]);
+
+  // Refresh the preview iframe
+  const refreshPreview = useCallback(() => {
+    if (iframeRef.current && url) {
+      iframeRef.current.src = url;
+      log("Preview refreshed");
+    }
+  }, [url, log]);
 
   // Run tests in WebContainer
   const runTests = useCallback(async () => {
@@ -374,66 +438,167 @@ export default function WebContainerPreview({
   }
 
   // Check if project has tests
-  const hasTests = Object.keys(files).some((f) => f.includes(".test."));
+  const hasTests = Object.keys(localFiles).some((f) => f.includes(".test."));
+  const fileCount = Object.keys(localFiles).length;
 
   return (
     <div className="h-full flex flex-col bg-zinc-950">
-      {/* Status bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800 text-xs">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            url ? "bg-green-500" : "bg-yellow-500 animate-pulse"
-          }`}
-        />
-        <span className="text-zinc-400">{status}</span>
-
-        {/* Test results badge */}
-        {testResults && (
-          <span className={`px-2 py-0.5 rounded ${
-            testResults.includes("✅") ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
-          }`}>
-            {testResults}
-          </span>
-        )}
-
-        {/* Run Tests button */}
-        {hasTests && url && (
+      {/* Tab bar with status */}
+      <div className="flex items-center justify-between bg-zinc-900 border-b border-zinc-800">
+        {/* Tabs */}
+        <div className="flex">
           <button
-            onClick={runTests}
-            disabled={isRunningTests}
-            className={`ml-auto px-3 py-1 rounded text-xs font-medium transition-colors ${
-              isRunningTests
-                ? "bg-zinc-700 text-zinc-400 cursor-wait"
-                : "bg-purple-600 hover:bg-purple-500 text-white"
+            onClick={() => setActiveTab("preview")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "preview"
+                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+                : "text-zinc-500 border-transparent hover:text-zinc-300"
             }`}
           >
-            {isRunningTests ? "Running..." : "🧪 Run Tests"}
+            Preview
           </button>
-        )}
+          <button
+            onClick={() => setActiveTab("files")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "files"
+                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+                : "text-zinc-500 border-transparent hover:text-zinc-300"
+            }`}
+          >
+            Files
+            <span className="ml-1.5 text-xs text-zinc-600">({fileCount})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("console")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === "console"
+                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+                : "text-zinc-500 border-transparent hover:text-zinc-300"
+            }`}
+          >
+            Console
+          </button>
+        </div>
 
-        {url && !hasTests && (
-          <span className="text-zinc-600 ml-auto truncate max-w-[200px]">
-            {url}
-          </span>
-        )}
+        {/* Status and actions */}
+        <div className="flex items-center gap-2 px-3">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              url ? "bg-green-500" : "bg-yellow-500 animate-pulse"
+            }`}
+          />
+          <span className="text-xs text-zinc-500">{status}</span>
+
+          {/* Test results badge */}
+          {testResults && (
+            <span className={`px-2 py-0.5 rounded text-xs ${
+              testResults.includes("✅") ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
+            }`}>
+              {testResults}
+            </span>
+          )}
+
+          {/* Refresh button */}
+          {url && (
+            <button
+              onClick={refreshPreview}
+              className="px-2 py-1 rounded text-xs font-medium transition-colors bg-zinc-700 hover:bg-zinc-600 text-zinc-300"
+              title="Refresh preview"
+            >
+              🔄
+            </button>
+          )}
+
+          {/* Run Tests button */}
+          {hasTests && url && (
+            <button
+              onClick={runTests}
+              disabled={isRunningTests}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                isRunningTests
+                  ? "bg-zinc-700 text-zinc-400 cursor-wait"
+                  : "bg-purple-600 hover:bg-purple-500 text-white"
+              }`}
+            >
+              {isRunningTests ? "Running..." : "🧪 Run Tests"}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Preview iframe */}
-      <div className="flex-1 relative">
-        {url ? (
-          <iframe
-            ref={iframeRef}
-            src={url}
-            className="w-full h-full border-0 bg-white"
-            title="WebContainer Preview"
-            allow="cross-origin-isolated"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4" />
-              <p className="text-zinc-400 text-sm">{status}</p>
+      {/* Tab content */}
+      <div className="flex-1 overflow-hidden">
+        {/* Preview tab */}
+        {activeTab === "preview" && (
+          <div className="h-full relative">
+            {url ? (
+              <iframe
+                ref={iframeRef}
+                src={url}
+                className="w-full h-full border-0 bg-white"
+                title="WebContainer Preview"
+                allow="cross-origin-isolated"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4" />
+                  <p className="text-zinc-400 text-sm">{status}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Files tab */}
+        {activeTab === "files" && (
+          <div className="h-full flex">
+            {/* File browser sidebar */}
+            <div className="w-56 border-r border-zinc-800 flex-shrink-0">
+              <FileBrowser
+                files={localFiles}
+                selectedFile={selectedFile}
+                onSelectFile={handleSelectFile}
+              />
             </div>
+            {/* Code editor */}
+            <div className="flex-1">
+              <CodeEditor
+                filePath={selectedFile}
+                content={selectedFile ? localFiles[selectedFile] || "" : ""}
+                onChange={handleFileChange}
+                onSave={handleFileSave}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Console tab */}
+        {activeTab === "console" && (
+          <div
+            ref={consoleRef}
+            className="h-full overflow-y-auto bg-black p-3 font-mono text-xs"
+          >
+            {consoleOutput.length === 0 ? (
+              <div className="text-zinc-600">Console output will appear here...</div>
+            ) : (
+              consoleOutput.map((line, i) => (
+                <div
+                  key={i}
+                  className={`whitespace-pre-wrap ${
+                    line.includes("error") || line.includes("Error") || line.includes("ERR")
+                      ? "text-red-400"
+                      : line.includes("warning") || line.includes("WARN")
+                      ? "text-yellow-400"
+                      : line.includes("✅") || line.includes("success")
+                      ? "text-green-400"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  {line}
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
