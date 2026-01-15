@@ -27,20 +27,15 @@ type CodeBundle map[string]string
 
 // GenerateCode takes the final spec and produces the file system
 func (a *DevAgent) GenerateCode(ctx context.Context, spec string) (CodeBundle, error) {
-	sysPrompt := `You are a Senior React Developer. 
+	sysPrompt := `You are a Senior React Developer using Vite. 
 Output ONLY valid JSON.
-The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.js", "/src/components/Header.js") and values are the code content.
+The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.jsx", "/src/components/Header.jsx") and values are the code content.
 Do not include markdown backticks.
-If generating 'package.json', YOU MUST INCLUDE:
-   - "react": "^18.2.0"
-   - "react-dom": "^18.2.0"
-   - "react-scripts": "5.0.1"
-   - "@testing-library/react": "^14.0.0"
-   - "@testing-library/jest-dom": "^5.16.5"
-   - "jest": "^29.5.0"
+Use .jsx extension for React components (NOT .js).
 Use standard CSS or inline styles. Do NOT use Tailwind CSS.
 Build a modern React app using React 18+ standards.
-IMPORTANT: If you generate '/src/index.js', IT MUST BE EXACTLY:
+DO NOT generate package.json - we will provide that.
+IMPORTANT: If you generate '/src/main.jsx', IT MUST BE EXACTLY:
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
@@ -164,53 +159,58 @@ func (a *DevAgent) postProcessBundle(bundle CodeBundle) CodeBundle {
 	}
 	bundle = normalized
 
-	// 1. Force valid index.js in /src
-	bundle["/src/index.js"] = `import React from 'react';
+	// 1. Force valid main.jsx in /src (Vite entry point)
+	bundle["/src/main.jsx"] = `import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 
 const root = createRoot(document.getElementById('root'));
 root.render(<App />);`
 
-	// 2. Inject setupTests.js for React Testing Library
-	bundle["/src/setupTests.js"] = `import '@testing-library/jest-dom';`
+	// 2. Ensure we have an index.html for Vite
+	bundle["/index.html"] = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sovereign Preview</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>`
 
-	// 3. Resolve package.json issues
-	var pkg map[string]interface{}
-	if content, ok := bundle["/package.json"]; ok {
-		json.Unmarshal([]byte(content), &pkg)
+	// 3. Ensure vite.config.js exists
+	bundle["/vite.config.js"] = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});`
+
+	// 4. Generate Vite-compatible package.json
+	pkg := map[string]interface{}{
+		"name": "sovereign-preview",
+		"type": "module",
+		"scripts": map[string]string{
+			"dev":   "vite",
+			"build": "vite build",
+			"test":  "vitest run",
+		},
+		"dependencies": map[string]string{
+			"react":     "^18.2.0",
+			"react-dom": "^18.2.0",
+		},
+		"devDependencies": map[string]string{
+			"vite":                   "^5.0.0",
+			"@vitejs/plugin-react":   "^4.2.0",
+			"vitest":                 "^1.0.0",
+			"@testing-library/react": "^14.0.0",
+			"jsdom":                  "^23.0.0",
+		},
 	}
 
-	if pkg == nil {
-		pkg = make(map[string]interface{})
-	}
-
-	// Ensure dependencies exist
-	deps, ok := pkg["dependencies"].(map[string]interface{})
-	if !ok {
-		deps = make(map[string]interface{})
-		pkg["dependencies"] = deps
-	}
-
-	// Inject core react deps
-	deps["react"] = "^18.2.0"
-	deps["react-dom"] = "^18.2.0"
-	deps["react-scripts"] = "5.0.1"
-
-	// Inject testing deps
-	deps["@testing-library/react"] = "^14.0.0"
-	deps["@testing-library/jest-dom"] = "^5.16.5"
-	deps["jest"] = "^29.5.0"
-
-	// Ensure scripts exist
-	if _, ok := pkg["scripts"]; !ok {
-		pkg["scripts"] = map[string]string{
-			"start": "react-scripts start",
-			"test":  "react-scripts test --watchAll=false",
-		}
-	}
-
-	// Write back
 	newPkg, _ := json.MarshalIndent(pkg, "", "  ")
 	bundle["/package.json"] = string(newPkg)
 

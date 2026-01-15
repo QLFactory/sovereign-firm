@@ -375,9 +375,13 @@ export default function PodConsole() {
     async function startPod() {
       try {
         setStatus("Starting Pod...");
+
+        // Generate unique project ID to ensure fresh workflow
+        const projectId = `project-${Date.now().toString(36)}`;
+
         const res = await fetch("/api/pods", {
           method: "POST",
-          body: JSON.stringify({ project_name: "demo-project" }),
+          body: JSON.stringify({ project_name: projectId }),
         });
         const data = await res.json();
         setWorkflowID(data.workflow_id);
