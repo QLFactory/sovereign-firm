@@ -1,153 +1,91 @@
 package treesitter
 
 import (
+	"context"
 	"testing"
 )
 
-// safeParse wraps Parse with panic recovery for tests
-func safeParse(p *Parser, filename string, code []byte) (result *ParseResult, err error, panicked bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			panicked = true
-		}
-	}()
-	result, err = p.Parse(filename, code)
-	return
-}
-
-func TestNewParser(t *testing.T) {
-	parser := NewParser()
-
-	if parser == nil {
-		t.Fatal("Expected parser to be created, got nil")
-	}
-
-	if parser.parsers == nil {
-		t.Error("Expected parsers map to be initialized")
-	}
-}
-
 func TestDetectLanguage(t *testing.T) {
 	tests := []struct {
-		filename string
+		name     string
+		filePath string
+		source   []byte
 		expected Language
 	}{
-		{"main.go", LangGo},
-		{"app.ts", LangTypeScript},
-		{"component.tsx", LangTSX},
-		{"script.js", LangJavaScript},
-		{"component.jsx", LangJSX},
-		{"app.py", LangPython},
-		{"main.rs", LangRust},
-		{"Main.java", LangJava},
-		{"main.c", LangC},
-		{"main.h", LangC},
-		{"main.cpp", LangCpp},
-		{"main.cc", LangCpp},
-		{"main.cxx", LangCpp},
-		{"main.hpp", LangCpp},
-		{"app.rb", LangRuby},
-		{"README.md", LangUnknown},
-		{"data.json", LangUnknown},
-		{"", LangUnknown},
+		{"JavaScript", "app.js", nil, LangJavaScript},
+		{"TypeScript", "app.ts", nil, LangTypeScript},
+		{"TSX", "App.tsx", nil, LangTSX},
+		{"JSX", "App.jsx", nil, LangJSX},
+		{"Go", "main.go", nil, LangGo},
+		{"Python", "script.py", nil, LangPython},
+		{"Rust", "lib.rs", nil, LangRust},
+		{"HTML", "index.html", nil, LangHTML},
+		{"CSS", "styles.css", nil, LangCSS},
+		{"JSON", "package.json", nil, LangJSON},
+		{"YAML", "config.yaml", nil, LangYAML},
+		{"YAML alternate", "docker-compose.yml", nil, LangYAML},
+		{"TOML", "Cargo.toml", nil, LangTOML},
+		{"Bash", "script.sh", nil, LangBash},
+		{"Markdown", "README.md", nil, LangMarkdown},
+		{"Unknown", "file.xyz", nil, LangUnknown},
+		// JSX detection from content
+		{"JS with JSX", "app.js", []byte(`import React from 'react'`), LangJSX},
+		{"JS with className", "app.js", []byte(`<div className="test" />`), LangJSX},
+		// Shebang detection
+		{"Python shebang", "script", []byte("#!/usr/bin/env python3\nprint('hello')"), LangPython},
+		{"Node shebang", "script", []byte("#!/usr/bin/env node\nconsole.log('hi')"), LangJavaScript},
+		{"Bash shebang", "script", []byte("#!/bin/bash\necho hello"), LangBash},
 	}
 
 	for _, tt := range tests {
-		result := DetectLanguage(tt.filename)
-		if result != tt.expected {
-			t.Errorf("DetectLanguage(%s) = %s, want %s", tt.filename, result, tt.expected)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			result := DetectLanguage(tt.filePath, tt.source)
+			if result != tt.expected {
+				t.Errorf("DetectLanguage(%q) = %q, want %q", tt.filePath, result, tt.expected)
+			}
+		})
 	}
 }
 
-func TestDetectLanguageCaseInsensitive(t *testing.T) {
-	// Test that extension detection is case-insensitive
-	tests := []struct {
-		filename string
-		expected Language
-	}{
-		{"main.GO", LangGo},
-		{"app.TS", LangTypeScript},
-		{"script.JS", LangJavaScript},
-		{"app.PY", LangPython},
-	}
+func TestParserParseJavaScript(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
 
-	for _, tt := range tests {
-		result := DetectLanguage(tt.filename)
-		if result != tt.expected {
-			t.Errorf("DetectLanguage(%s) = %s, want %s", tt.filename, result, tt.expected)
-		}
-	}
+	source := []byte(`
+function hello(name) {
+	return "Hello, " + name;
 }
 
-func TestLanguageConstants(t *testing.T) {
-	tests := []struct {
-		lang     Language
-		expected string
-	}{
-		{LangGo, "go"},
-		{LangTypeScript, "typescript"},
-		{LangTSX, "tsx"},
-		{LangJavaScript, "javascript"},
-		{LangJSX, "jsx"},
-		{LangPython, "python"},
-		{LangRust, "rust"},
-		{LangJava, "java"},
-		{LangC, "c"},
-		{LangCpp, "cpp"},
-		{LangRuby, "ruby"},
-		{LangUnknown, "unknown"},
-	}
-
-	for _, tt := range tests {
-		if string(tt.lang) != tt.expected {
-			t.Errorf("Expected '%s', got '%s'", tt.expected, tt.lang)
-		}
-	}
-}
-
-func TestParseGoCode(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("Hello, World!")
-}
-
-func helper(x int) int {
-	return x * 2
-}
+const greeting = hello("World");
+console.log(greeting);
 `)
 
-	result, err, panicked := safeParse(parser, "main.go", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "test.js", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
 	}
 
-	if result == nil {
-		t.Fatal("Expected parse result, got nil")
-	}
-
-	if result.Language != LangGo {
-		t.Errorf("Expected language Go, got %s", result.Language)
+	if result.Language != LangJavaScript {
+		t.Errorf("Language = %q, want %q", result.Language, LangJavaScript)
 	}
 
 	if result.Tree == nil {
-		t.Error("Expected AST tree to be populated")
+		t.Fatal("Tree is nil")
 	}
 
-	if result.Filename != "main.go" {
-		t.Errorf("Expected filename 'main.go', got '%s'", result.Filename)
+	root := result.Tree.RootNode()
+	if root.Type() != "program" {
+		t.Errorf("Root type = %q, want %q", root.Type(), "program")
 	}
 }
 
-func TestParseTypeScriptCode(t *testing.T) {
-	parser := NewParser()
+func TestParserParseTypeScript(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
 
-	code := []byte(`interface User {
+	source := []byte(`
+interface User {
 	name: string;
 	age: number;
 }
@@ -155,377 +93,162 @@ func TestParseTypeScriptCode(t *testing.T) {
 function greet(user: User): string {
 	return "Hello, " + user.name;
 }
-
-class UserService {
-	private users: User[] = [];
-
-	addUser(user: User): void {
-		this.users.push(user);
-	}
-}
 `)
 
-	result, err, panicked := safeParse(parser, "app.ts", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "test.ts", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
 	}
 
 	if result.Language != LangTypeScript {
-		t.Errorf("Expected language TypeScript, got %s", result.Language)
+		t.Errorf("Language = %q, want %q", result.Language, LangTypeScript)
 	}
 }
 
-func TestParsePythonCode(t *testing.T) {
-	parser := NewParser()
+func TestParserParseGo(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
 
-	code := []byte(`def hello(name: str) -> str:
-    return f"Hello, {name}!"
+	source := []byte(`
+package main
 
-class Calculator:
-    def __init__(self):
-        self.result = 0
-
-    def add(self, x: int, y: int) -> int:
-        return x + y
-`)
-
-	result, err, panicked := safeParse(parser, "app.py", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	if result.Language != LangPython {
-		t.Errorf("Expected language Python, got %s", result.Language)
-	}
-}
-
-func TestParseJavaScriptCode(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`function add(a, b) {
-	return a + b;
-}
-
-const multiply = (a, b) => a * b;
-
-class Calculator {
-	constructor() {
-		this.value = 0;
-	}
-}
-`)
-
-	result, err, panicked := safeParse(parser, "script.js", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	if result.Language != LangJavaScript {
-		t.Errorf("Expected language JavaScript, got %s", result.Language)
-	}
-}
-
-func TestParseUnknownLanguage(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte("Some random content")
-
-	_, err := parser.Parse("file.unknown", code)
-	if err == nil {
-		t.Error("Expected error for unknown language, got nil")
-	}
-}
-
-func TestExtractGoSymbols(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`package main
-
-func main() {
-	println("hello")
-}
-
-func helper(x int) int {
-	return x * 2
-}
+import "fmt"
 
 type User struct {
 	Name string
 	Age  int
 }
-`)
 
-	result, err, panicked := safeParse(parser, "main.go", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	symbols, err := parser.ExtractSymbols(result)
-	if err != nil {
-		t.Fatalf("ExtractSymbols error: %v", err)
-	}
-
-	// Should find at least the two functions and the type
-	if len(symbols) < 2 {
-		t.Errorf("Expected at least 2 symbols, got %d", len(symbols))
-	}
-
-	// Check that we found the main function
-	foundMain := false
-	for _, sym := range symbols {
-		if sym.Name == "main" && sym.Kind == "function" {
-			foundMain = true
-			break
-		}
-	}
-	if !foundMain {
-		t.Error("Expected to find 'main' function symbol")
-	}
+func (u *User) Greet() string {
+	return fmt.Sprintf("Hello, %s", u.Name)
 }
-
-func TestExtractTypeScriptSymbols(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`interface User {
-	name: string;
-}
-
-function greet(user: User): string {
-	return "Hello";
-}
-
-class UserService {
-	addUser(user: User): void {}
-}
-`)
-
-	result, err, panicked := safeParse(parser, "app.ts", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	symbols, err := parser.ExtractSymbols(result)
-	if err != nil {
-		t.Fatalf("ExtractSymbols error: %v", err)
-	}
-
-	if len(symbols) < 2 {
-		t.Errorf("Expected at least 2 symbols, got %d", len(symbols))
-	}
-}
-
-func TestExtractPythonSymbols(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`def hello():
-    pass
-
-class MyClass:
-    def method(self):
-        pass
-`)
-
-	result, err, panicked := safeParse(parser, "app.py", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	symbols, err := parser.ExtractSymbols(result)
-	if err != nil {
-		t.Fatalf("ExtractSymbols error: %v", err)
-	}
-
-	if len(symbols) < 2 {
-		t.Errorf("Expected at least 2 symbols, got %d", len(symbols))
-	}
-}
-
-func TestValidateSyntaxValid(t *testing.T) {
-	parser := NewParser()
-
-	validCode := []byte(`package main
 
 func main() {
-	println("valid")
+	user := &User{Name: "World", Age: 30}
+	fmt.Println(user.Greet())
 }
 `)
 
-	// Use safeParse to check if parsing works first
-	_, err, panicked := safeParse(parser, "main.go", validCode)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	valid, errors := parser.ValidateSyntax("main.go", validCode)
-	if !valid {
-		t.Errorf("Expected valid syntax, got errors: %v", errors)
-	}
-}
-
-func TestValidateSyntaxInvalid(t *testing.T) {
-	parser := NewParser()
-
-	validCode := []byte(`package main`)
-
-	// First check if parsing works at all
-	_, err, panicked := safeParse(parser, "main.go", validCode)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	// Intentionally invalid Go code
-	invalidCode := []byte(`package main
-
-func main( {
-	println("missing paren")
-}
-`)
-
-	valid, errors := parser.ValidateSyntax("main.go", invalidCode)
-	if valid {
-		t.Error("Expected invalid syntax to be detected")
-	}
-
-	if len(errors) == 0 {
-		t.Error("Expected at least one error to be reported")
-	}
-}
-
-func TestSymbolStructure(t *testing.T) {
-	sym := Symbol{
-		Name:       "myFunction",
-		Kind:       "function",
-		Language:   LangGo,
-		File:       "main.go",
-		StartLine:  10,
-		EndLine:    20,
-		StartByte:  100,
-		EndByte:    500,
-		Signature:  "func myFunction(x int) int",
-		DocComment: "// myFunction does something",
-		Parent:     "MyClass",
-	}
-
-	if sym.Name != "myFunction" {
-		t.Errorf("Expected name 'myFunction', got '%s'", sym.Name)
-	}
-
-	if sym.Kind != "function" {
-		t.Errorf("Expected kind 'function', got '%s'", sym.Kind)
-	}
-
-	if sym.StartLine != 10 {
-		t.Errorf("Expected start line 10, got %d", sym.StartLine)
-	}
-}
-
-func TestParseResultStructure(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte("package main\n")
-	result, _, panicked := safeParse(parser, "main.go", code)
-	if panicked || result == nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	if result.Filename != "main.go" {
-		t.Errorf("Expected filename 'main.go', got '%s'", result.Filename)
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "main.go", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
 	}
 
 	if result.Language != LangGo {
-		t.Errorf("Expected language Go, got %s", result.Language)
+		t.Errorf("Language = %q, want %q", result.Language, LangGo)
 	}
 
-	if len(result.Code) == 0 {
-		t.Error("Expected code to be stored in result")
-	}
-}
-
-func TestExtractNodeContent(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`package main
-
-func hello() {
-	println("hi")
-}
-`)
-
-	result, err, panicked := safeParse(parser, "main.go", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	// Get the root node
 	root := result.Tree.RootNode()
-	content := ExtractNodeContent(root, code)
-
-	if content == "" {
-		t.Error("Expected non-empty content from root node")
+	if root.Type() != "source_file" {
+		t.Errorf("Root type = %q, want %q", root.Type(), "source_file")
 	}
 }
 
-func TestParserCaching(t *testing.T) {
-	parser := NewParser()
+func TestParserParsePython(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
 
-	// Parse multiple Go files - should reuse parser
-	code1 := []byte("package main\nfunc one() {}")
-	code2 := []byte("package main\nfunc two() {}")
+	source := []byte(`
+class User:
+    def __init__(self, name: str, age: int):
+        self.name = name
+        self.age = age
+    
+    def greet(self) -> str:
+        return f"Hello, {self.name}"
 
-	_, err1, panicked1 := safeParse(parser, "file1.go", code1)
-	if panicked1 {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
+def main():
+    user = User("World", 30)
+    print(user.greet())
 
-	_, err2, panicked2 := safeParse(parser, "file2.go", code2)
-	if panicked2 {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
-	}
-
-	if err1 != nil || err2 != nil {
-		t.Skipf("Skipping: tree-sitter parsing errors")
-	}
-
-	// Check that only one Go parser was created
-	parser.mu.RLock()
-	numParsers := len(parser.parsers)
-	parser.mu.RUnlock()
-
-	if numParsers != 1 {
-		t.Errorf("Expected 1 cached parser, got %d", numParsers)
-	}
-}
-
-func TestGetNodeAtPosition(t *testing.T) {
-	parser := NewParser()
-
-	code := []byte(`package main
-
-func hello() {
-	println("test")
-}
+if __name__ == "__main__":
+    main()
 `)
 
-	result, err, panicked := safeParse(parser, "main.go", code)
-	if panicked || err != nil {
-		t.Skipf("Skipping: tree-sitter native parsing not available")
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "main.py", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
 	}
 
-	// Get node at line 3 (where the function is)
-	node := parser.GetNodeAtPosition(result, 3, 5)
-	if node == nil {
-		t.Error("Expected to find a node at position")
+	if result.Language != LangPython {
+		t.Errorf("Language = %q, want %q", result.Language, LangPython)
 	}
 }
 
-func TestMinFunction(t *testing.T) {
-	if min(5, 10) != 5 {
-		t.Error("min(5, 10) should be 5")
+func TestSupportedLanguages(t *testing.T) {
+	langs := SupportedLanguages()
+	if len(langs) == 0 {
+		t.Error("SupportedLanguages returned empty list")
 	}
-	if min(10, 5) != 5 {
-		t.Error("min(10, 5) should be 5")
+
+	// Check that common languages are supported
+	expected := []Language{LangJavaScript, LangTypeScript, LangGo, LangPython}
+	for _, exp := range expected {
+		found := false
+		for _, lang := range langs {
+			if lang == exp {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected language %q not in supported list", exp)
+		}
 	}
-	if min(5, 5) != 5 {
-		t.Error("min(5, 5) should be 5")
+}
+
+func TestIsSupported(t *testing.T) {
+	tests := []struct {
+		lang     Language
+		expected bool
+	}{
+		{LangJavaScript, true},
+		{LangTypeScript, true},
+		{LangGo, true},
+		{LangPython, true},
+		{LangUnknown, false},
+		{Language("cobol"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.lang), func(t *testing.T) {
+			result := IsSupported(tt.lang)
+			if result != tt.expected {
+				t.Errorf("IsSupported(%q) = %v, want %v", tt.lang, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParserConcurrency(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
+
+	// Parse multiple files concurrently
+	files := map[string][]byte{
+		"test.js": []byte(`function foo() { return 1; }`),
+		"test.ts": []byte(`const x: number = 1;`),
+		"test.go": []byte(`package main; func main() {}`),
+		"test.py": []byte(`def foo(): pass`),
+	}
+
+	ctx := context.Background()
+	done := make(chan bool)
+
+	for path, source := range files {
+		go func(filePath string, src []byte) {
+			_, err := p.Parse(ctx, filePath, src)
+			if err != nil {
+				t.Errorf("Parse(%q) failed: %v", filePath, err)
+			}
+			done <- true
+		}(path, source)
+	}
+
+	for range files {
+		<-done
 	}
 }

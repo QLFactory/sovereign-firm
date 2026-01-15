@@ -1,54 +1,70 @@
-// Package treesitter provides language-agnostic code parsing and analysis.
-// It wraps go-tree-sitter to provide consistent AST access across 20+ languages.
+// Package treesitter provides code parsing and analysis using tree-sitter.
 package treesitter
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/smacker/go-tree-sitter/bash"
+	"github.com/smacker/go-tree-sitter/css"
 	"github.com/smacker/go-tree-sitter/golang"
+	"github.com/smacker/go-tree-sitter/html"
 	"github.com/smacker/go-tree-sitter/javascript"
 	"github.com/smacker/go-tree-sitter/python"
+	"github.com/smacker/go-tree-sitter/rust"
+	"github.com/smacker/go-tree-sitter/toml"
 	"github.com/smacker/go-tree-sitter/typescript/tsx"
 	"github.com/smacker/go-tree-sitter/typescript/typescript"
+	"github.com/smacker/go-tree-sitter/yaml"
 )
 
-// Language represents a detected programming language
+// Language represents a supported programming language
 type Language string
 
 const (
-	LangGo         Language = "go"
+	LangUnknown    Language = "unknown"
+	LangJavaScript Language = "javascript"
 	LangTypeScript Language = "typescript"
 	LangTSX        Language = "tsx"
-	LangJavaScript Language = "javascript"
 	LangJSX        Language = "jsx"
+	LangGo         Language = "go"
 	LangPython     Language = "python"
 	LangRust       Language = "rust"
-	LangJava       Language = "java"
-	LangC          Language = "c"
-	LangCpp        Language = "cpp"
-	LangRuby       Language = "ruby"
-	LangUnknown    Language = "unknown"
+	LangHTML       Language = "html"
+	LangCSS        Language = "css"
+	LangJSON       Language = "json"     // Not parsed, just detected
+	LangYAML       Language = "yaml"
+	LangTOML       Language = "toml"
+	LangBash       Language = "bash"
+	LangMarkdown   Language = "markdown"
 )
 
-// Parser provides language-agnostic code parsing
+// Parser provides multi-language code parsing using tree-sitter
 type Parser struct {
 	parsers map[Language]*sitter.Parser
 	mu      sync.RWMutex
 }
 
-// NewParser creates a new Tree-sitter parser
+// NewParser creates a new multi-language parser
 func NewParser() *Parser {
 	return &Parser{
 		parsers: make(map[Language]*sitter.Parser),
 	}
 }
 
-// getParser returns or creates a parser for the given language
+// getParser returns a parser for the given language, creating one if needed
 func (p *Parser) getParser(lang Language) (*sitter.Parser, error) {
+	p.mu.RLock()
+	if parser, ok := p.parsers[lang]; ok {
+		p.mu.RUnlock()
+		return parser, nil
+	}
+	p.mu.RUnlock()
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -57,362 +73,183 @@ func (p *Parser) getParser(lang Language) (*sitter.Parser, error) {
 	}
 
 	parser := sitter.NewParser()
-	sitterLang, err := p.getSitterLanguage(lang)
+	sitterLang, err := getSitterLanguage(lang)
 	if err != nil {
 		return nil, err
 	}
-
 	parser.SetLanguage(sitterLang)
 	p.parsers[lang] = parser
+
 	return parser, nil
 }
 
-// getSitterLanguage returns the Tree-sitter language implementation
-func (p *Parser) getSitterLanguage(lang Language) (*sitter.Language, error) {
+// getSitterLanguage returns the tree-sitter language for a given Language
+func getSitterLanguage(lang Language) (*sitter.Language, error) {
 	switch lang {
-	case LangGo:
-		return golang.GetLanguage(), nil
+	case LangJavaScript, LangJSX:
+		return javascript.GetLanguage(), nil
 	case LangTypeScript:
 		return typescript.GetLanguage(), nil
-	case LangTSX, LangJSX:
+	case LangTSX:
 		return tsx.GetLanguage(), nil
-	case LangJavaScript:
-		return javascript.GetLanguage(), nil
+	case LangGo:
+		return golang.GetLanguage(), nil
 	case LangPython:
 		return python.GetLanguage(), nil
+	case LangRust:
+		return rust.GetLanguage(), nil
+	case LangHTML:
+		return html.GetLanguage(), nil
+	case LangCSS:
+		return css.GetLanguage(), nil
+	case LangYAML:
+		return yaml.GetLanguage(), nil
+	case LangTOML:
+		return toml.GetLanguage(), nil
+	case LangBash:
+		return bash.GetLanguage(), nil
 	default:
 		return nil, fmt.Errorf("unsupported language: %s", lang)
 	}
 }
 
-// DetectLanguage determines the programming language from a filename
-func DetectLanguage(filename string) Language {
-	ext := strings.ToLower(filepath.Ext(filename))
-
-	switch ext {
-	case ".go":
-		return LangGo
-	case ".ts":
-		return LangTypeScript
-	case ".tsx":
-		return LangTSX
-	case ".js":
-		return LangJavaScript
-	case ".jsx":
-		return LangJSX
-	case ".py":
-		return LangPython
-	case ".rs":
-		return LangRust
-	case ".java":
-		return LangJava
-	case ".c", ".h":
-		return LangC
-	case ".cpp", ".cc", ".cxx", ".hpp":
-		return LangCpp
-	case ".rb":
-		return LangRuby
-	default:
-		return LangUnknown
-	}
-}
-
-// ParseResult contains the parsed AST and metadata
+// ParseResult contains the parsed syntax tree and metadata
 type ParseResult struct {
 	Tree     *sitter.Tree
 	Language Language
-	Filename string
-	Code     []byte
+	FilePath string
+	Source   []byte
 }
 
-// Parse parses code and returns the AST
-func (p *Parser) Parse(filename string, code []byte) (*ParseResult, error) {
-	lang := DetectLanguage(filename)
+// Parse parses source code with automatic language detection
+func (p *Parser) Parse(ctx context.Context, filePath string, source []byte) (*ParseResult, error) {
+	lang := DetectLanguage(filePath, source)
 	if lang == LangUnknown {
-		return nil, fmt.Errorf("cannot detect language for %s", filename)
+		return nil, fmt.Errorf("could not detect language for file: %s", filePath)
 	}
 
+	return p.ParseWithLanguage(ctx, filePath, source, lang)
+}
+
+// ParseWithLanguage parses source code with a specific language
+func (p *Parser) ParseWithLanguage(ctx context.Context, filePath string, source []byte, lang Language) (*ParseResult, error) {
 	parser, err := p.getParser(lang)
 	if err != nil {
 		return nil, err
 	}
 
-	tree, err := parser.ParseCtx(nil, nil, code)
+	tree, err := parser.ParseCtx(ctx, nil, source)
 	if err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
+		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
 	}
 
 	return &ParseResult{
 		Tree:     tree,
 		Language: lang,
-		Filename: filename,
-		Code:     code,
+		FilePath: filePath,
+		Source:   source,
 	}, nil
 }
 
-// Symbol represents a code symbol (function, class, variable, etc.)
-type Symbol struct {
-	Name       string   `json:"name"`
-	Kind       string   `json:"kind"` // function, class, method, variable, type
-	Language   Language `json:"language"`
-	File       string   `json:"file"`
-	StartLine  int      `json:"start_line"`
-	EndLine    int      `json:"end_line"`
-	StartByte  uint32   `json:"start_byte"`
-	EndByte    uint32   `json:"end_byte"`
-	Signature  string   `json:"signature,omitempty"`
-	DocComment string   `json:"doc_comment,omitempty"`
-	Parent     string   `json:"parent,omitempty"` // For methods, the class name
-}
+// DetectLanguage detects the programming language from file path and content
+func DetectLanguage(filePath string, source []byte) Language {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	baseName := strings.ToLower(filepath.Base(filePath))
 
-// ExtractSymbols extracts all symbols from a parsed file
-func (p *Parser) ExtractSymbols(result *ParseResult) ([]Symbol, error) {
-	var symbols []Symbol
-
-	rootNode := result.Tree.RootNode()
-
-	// Walk the tree and extract symbols based on language
-	p.walkTree(rootNode, result, "", &symbols)
-
-	return symbols, nil
-}
-
-// walkTree recursively walks the AST extracting symbols
-func (p *Parser) walkTree(node *sitter.Node, result *ParseResult, parent string, symbols *[]Symbol) {
-	if node == nil {
-		return
+	switch ext {
+	case ".js":
+		if containsJSX(source) {
+			return LangJSX
+		}
+		return LangJavaScript
+	case ".jsx":
+		return LangJSX
+	case ".ts":
+		return LangTypeScript
+	case ".tsx":
+		return LangTSX
+	case ".go":
+		return LangGo
+	case ".py":
+		return LangPython
+	case ".rs":
+		return LangRust
+	case ".html", ".htm":
+		return LangHTML
+	case ".css":
+		return LangCSS
+	case ".json":
+		return LangJSON
+	case ".yaml", ".yml":
+		return LangYAML
+	case ".toml":
+		return LangTOML
+	case ".sh", ".bash":
+		return LangBash
+	case ".md", ".markdown":
+		return LangMarkdown
 	}
 
-	// Extract symbol based on node type
-	if sym := p.extractSymbol(node, result, parent); sym != nil {
-		*symbols = append(*symbols, *sym)
+	switch baseName {
+	case "dockerfile":
+		return LangBash
+	case "makefile", "gnumakefile":
+		return LangBash
+	case ".bashrc", ".bash_profile", ".zshrc":
+		return LangBash
+	}
 
-		// Update parent for nested symbols
-		if sym.Kind == "class" || sym.Kind == "interface" {
-			parent = sym.Name
+	if len(source) > 2 && source[0] == '#' && source[1] == '!' {
+		shebang := strings.ToLower(string(source[:min(100, len(source))]))
+		if strings.Contains(shebang, "python") {
+			return LangPython
+		}
+		if strings.Contains(shebang, "node") {
+			return LangJavaScript
+		}
+		if strings.Contains(shebang, "bash") || strings.Contains(shebang, "/sh") {
+			return LangBash
 		}
 	}
 
-	// Recurse into children
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		p.walkTree(child, result, parent, symbols)
+	return LangUnknown
+}
+
+// containsJSX checks if JavaScript source contains JSX syntax
+func containsJSX(source []byte) bool {
+	s := string(source)
+	return strings.Contains(s, "React") ||
+		strings.Contains(s, "jsx") ||
+		strings.Contains(s, "</>") ||
+		strings.Contains(s, "/>") ||
+		(strings.Contains(s, "<") && strings.Contains(s, "className"))
+}
+
+// SupportedLanguages returns a list of all supported languages for parsing
+func SupportedLanguages() []Language {
+	return []Language{
+		LangJavaScript, LangTypeScript, LangTSX, LangJSX,
+		LangGo, LangPython, LangRust,
+		LangHTML, LangCSS, LangYAML, LangTOML, LangBash,
 	}
 }
 
-// extractSymbol extracts a symbol from an AST node
-func (p *Parser) extractSymbol(node *sitter.Node, result *ParseResult, parent string) *Symbol {
-	nodeType := node.Type()
-
-	var kind string
-	var nameNode *sitter.Node
-
-	switch result.Language {
-	case LangGo:
-		kind, nameNode = p.extractGoSymbol(node)
-	case LangTypeScript, LangTSX, LangJavaScript, LangJSX:
-		kind, nameNode = p.extractJSSymbol(node)
-	case LangPython:
-		kind, nameNode = p.extractPythonSymbol(node)
-	default:
-		return nil
-	}
-
-	if kind == "" || nameNode == nil {
-		return nil
-	}
-
-	name := string(result.Code[nameNode.StartByte():nameNode.EndByte()])
-
-	// Get signature (the whole first line)
-	startLine := int(node.StartPoint().Row)
-	endLine := int(node.EndPoint().Row)
-
-	return &Symbol{
-		Name:      name,
-		Kind:      kind,
-		Language:  result.Language,
-		File:      result.Filename,
-		StartLine: startLine + 1, // 1-indexed
-		EndLine:   endLine + 1,
-		StartByte: node.StartByte(),
-		EndByte:   node.EndByte(),
-		Parent:    parent,
-		Signature: p.getSignature(node, result.Code, nodeType),
-	}
-}
-
-// extractGoSymbol extracts symbol info from Go AST nodes
-func (p *Parser) extractGoSymbol(node *sitter.Node) (kind string, nameNode *sitter.Node) {
-	switch node.Type() {
-	case "function_declaration":
-		nameNode = node.ChildByFieldName("name")
-		return "function", nameNode
-	case "method_declaration":
-		nameNode = node.ChildByFieldName("name")
-		return "method", nameNode
-	case "type_declaration":
-		// Look for type_spec child
-		for i := 0; i < int(node.ChildCount()); i++ {
-			child := node.Child(i)
-			if child.Type() == "type_spec" {
-				nameNode = child.ChildByFieldName("name")
-				return "type", nameNode
-			}
-		}
-	case "var_declaration", "const_declaration":
-		// Look for var_spec child
-		for i := 0; i < int(node.ChildCount()); i++ {
-			child := node.Child(i)
-			if strings.HasSuffix(child.Type(), "_spec") {
-				nameNode = child.ChildByFieldName("name")
-				if node.Type() == "const_declaration" {
-					return "constant", nameNode
-				}
-				return "variable", nameNode
-			}
+// IsSupported returns true if the language is supported for parsing
+func IsSupported(lang Language) bool {
+	for _, l := range SupportedLanguages() {
+		if l == lang {
+			return true
 		}
 	}
-	return "", nil
+	return false
 }
 
-// extractJSSymbol extracts symbol info from JavaScript/TypeScript AST nodes
-func (p *Parser) extractJSSymbol(node *sitter.Node) (kind string, nameNode *sitter.Node) {
-	switch node.Type() {
-	case "function_declaration", "function":
-		nameNode = node.ChildByFieldName("name")
-		return "function", nameNode
-	case "arrow_function":
-		// Arrow functions in assignments
-		parent := node.Parent()
-		if parent != nil && parent.Type() == "variable_declarator" {
-			nameNode = parent.ChildByFieldName("name")
-			return "function", nameNode
-		}
-	case "class_declaration", "class":
-		nameNode = node.ChildByFieldName("name")
-		return "class", nameNode
-	case "method_definition":
-		nameNode = node.ChildByFieldName("name")
-		return "method", nameNode
-	case "interface_declaration":
-		nameNode = node.ChildByFieldName("name")
-		return "interface", nameNode
-	case "type_alias_declaration":
-		nameNode = node.ChildByFieldName("name")
-		return "type", nameNode
-	case "lexical_declaration":
-		// const/let declarations
-		for i := 0; i < int(node.ChildCount()); i++ {
-			child := node.Child(i)
-			if child.Type() == "variable_declarator" {
-				nameNode = child.ChildByFieldName("name")
-				return "variable", nameNode
-			}
-		}
+// Close releases all parser resources
+func (p *Parser) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, parser := range p.parsers {
+		parser.Close()
 	}
-	return "", nil
-}
-
-// extractPythonSymbol extracts symbol info from Python AST nodes
-func (p *Parser) extractPythonSymbol(node *sitter.Node) (kind string, nameNode *sitter.Node) {
-	switch node.Type() {
-	case "function_definition":
-		nameNode = node.ChildByFieldName("name")
-		return "function", nameNode
-	case "class_definition":
-		nameNode = node.ChildByFieldName("name")
-		return "class", nameNode
-	case "decorated_definition":
-		// Handle @decorator on functions/classes
-		for i := 0; i < int(node.ChildCount()); i++ {
-			child := node.Child(i)
-			if child.Type() == "function_definition" {
-				nameNode = child.ChildByFieldName("name")
-				return "function", nameNode
-			}
-			if child.Type() == "class_definition" {
-				nameNode = child.ChildByFieldName("name")
-				return "class", nameNode
-			}
-		}
-	}
-	return "", nil
-}
-
-// getSignature extracts the first line of a symbol as its signature
-func (p *Parser) getSignature(node *sitter.Node, code []byte, nodeType string) string {
-	start := node.StartByte()
-	end := node.EndByte()
-
-	// Find first newline
-	for i := start; i < end && i < uint32(len(code)); i++ {
-		if code[i] == '\n' {
-			return strings.TrimSpace(string(code[start:i]))
-		}
-	}
-
-	// No newline, use whole content (but limit length)
-	content := string(code[start:end])
-	if len(content) > 100 {
-		content = content[:100] + "..."
-	}
-	return strings.TrimSpace(content)
-}
-
-// ValidateSyntax checks if the code is syntactically valid
-func (p *Parser) ValidateSyntax(filename string, code []byte) (valid bool, errors []string) {
-	result, err := p.Parse(filename, code)
-	if err != nil {
-		return false, []string{err.Error()}
-	}
-
-	// Check for error nodes in the tree
-	errors = p.findErrors(result.Tree.RootNode(), code)
-	return len(errors) == 0, errors
-}
-
-// findErrors recursively finds error nodes in the AST
-func (p *Parser) findErrors(node *sitter.Node, code []byte) []string {
-	var errors []string
-
-	if node.IsError() || node.IsMissing() {
-		line := node.StartPoint().Row + 1
-		col := node.StartPoint().Column + 1
-
-		snippet := ""
-		if node.EndByte() > node.StartByte() {
-			snippet = string(code[node.StartByte():min(node.EndByte(), node.StartByte()+50)])
-		}
-
-		errors = append(errors, fmt.Sprintf(
-			"Syntax error at line %d, column %d: near '%s'",
-			line, col, snippet,
-		))
-	}
-
-	for i := 0; i < int(node.ChildCount()); i++ {
-		childErrors := p.findErrors(node.Child(i), code)
-		errors = append(errors, childErrors...)
-	}
-
-	return errors
-}
-
-// GetNodeAtPosition finds the AST node at a given line/column
-func (p *Parser) GetNodeAtPosition(result *ParseResult, line, column int) *sitter.Node {
-	point := sitter.Point{Row: uint32(line - 1), Column: uint32(column)}
-	return result.Tree.RootNode().NamedDescendantForPointRange(point, point)
-}
-
-// ExtractNodeContent gets the code content for a node
-func ExtractNodeContent(node *sitter.Node, code []byte) string {
-	return string(code[node.StartByte():node.EndByte()])
-}
-
-func min(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
+	p.parsers = make(map[Language]*sitter.Parser)
 }
