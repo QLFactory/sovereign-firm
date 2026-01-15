@@ -431,6 +431,16 @@ func (a *ProjectAnalyzer) detectEntryPoints(projectDir string, stack *ProjectSta
 	}
 }
 
+// AnalyzeFile analyzes a single file and returns its code structure
+func (a *ProjectAnalyzer) AnalyzeFile(ctx context.Context, filePath string, source []byte) (*CodeStructure, error) {
+	result, err := a.parser.Parse(ctx, filePath, source)
+	if err != nil {
+		return nil, err
+	}
+
+	return ExtractSymbols(result)
+}
+
 // AnalyzeFiles analyzes multiple files and returns their combined structure
 func (a *ProjectAnalyzer) AnalyzeFiles(ctx context.Context, files map[string]string) (*ProjectAnalysis, error) {
 	analysis := &ProjectAnalysis{

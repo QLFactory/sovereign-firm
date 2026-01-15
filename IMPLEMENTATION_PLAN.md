@@ -13,7 +13,7 @@
 |-------|--------|----------|------------|----------|
 | Phase 0: Foundation | 🟢 Complete | 100% | 2026-01-15 | 2026-01-15 |
 | Phase 1: Agent Core | 🟢 Complete | 100% | 2026-01-15 | 2026-01-15 |
-| Phase 2: Execution Layer | 🟡 In Progress | 25% | 2026-01-15 | - |
+| Phase 2: Execution Layer | 🟡 In Progress | 55% | 2026-01-15 | - |
 | Phase 3: Intelligence Layer | 🔴 Not Started | 0% | - | - |
 | Phase 4: Multi-Agent | 🔴 Not Started | 0% | - | - |
 | Phase 5: Enterprise Features | 🔴 Not Started | 0% | - | - |
@@ -139,8 +139,9 @@
 | 2.4 | Level 2: Network restrictions | 🔴 | - | Allowlist npm |
 | 2.5 | Level 3: Firecracker microVM (optional) | 🔴 | - | For untrusted code |
 | 2.6 | Sandbox selection logic | 🔴 | - | Choose level by trust |
-| 2.7 | Tree-sitter integration | 🔴 | - | Code analysis |
-| 2.8 | Universal language detection | 🔴 | - | Auto-detect stack |
+| 2.7 | Tree-sitter integration | 🟢 | AI | pkg/treesitter - 11 languages, symbol extraction |
+| 2.8 | Universal language detection | 🟢 | AI | Project stack detection (React, Go, Python frameworks) |
+| 2.9 | Agent context integration | 🟢 | AI | pkg/agent/context.go - CodeContextManager, intelligent context selection |
 
 ### Testing Requirements
 
@@ -149,7 +150,7 @@
 | Unit | WebContainers file operations | 🟢 |
 | Unit | gVisor container lifecycle | 🔴 |
 | Unit | Resource limit enforcement | 🔴 |
-| Unit | Tree-sitter parsing (5+ languages) | 🔴 |
+| Unit | Tree-sitter parsing (11 languages) | 🟢 |
 | Security | Network isolation verified | 🔴 |
 | Security | Filesystem isolation verified | 🔴 |
 | Integration | Execute code in all 3 sandbox levels | 🔴 |
@@ -159,7 +160,7 @@
 - [ ] Code executes in gVisor container (server)
 - [ ] Resource limits enforced
 - [ ] Network restrictions working
-- [ ] Tree-sitter parses 5+ languages
+- [x] Tree-sitter parses 11 languages
 - [ ] All tests passing
 - [ ] Security review complete
 
@@ -387,6 +388,18 @@ A phase is complete when:
 
 **Current Session:** 2026-01-15 (Updated 23:30 UTC)
 
+### What Was Done (Tree-sitter Agent Integration - Latest)
+- **Task 2.9: Agent Context Integration - COMPLETE:**
+  - Created `pkg/agent/context.go` - CodeContextManager
+  - Intelligent code context selection using tree-sitter analysis
+  - Symbol indexing across entire codebase
+  - Keyword extraction from task descriptions
+  - File relevance scoring based on symbols, file types, task type
+  - Token-aware context selection (stays within limits)
+  - `PopulateAgentContext()` fills agent context with relevant code
+  - 6 new tests: context manager, context selection, keyword extraction
+  - All tests passing (full test suite)
+
 ### What Was Done (Late Evening - Phase 2)
 - **Enhanced WebContainers (Task 2.1) - COMPLETE:**
   - Added **File Browser** panel with tree view, icons, expand/collapse
@@ -453,11 +466,10 @@ A phase is complete when:
 ### Next Steps
 1. ✅ Phase 0: Task 0.6 Complete (78 unit tests)
 2. ✅ Phase 2: Task 2.1 Complete (WebContainers enhancement)
-3. **IN PROGRESS** Phase 2: Tasks 2.7-2.8
-   - Task 2.7: Tree-sitter integration for code analysis
-   - Task 2.8: Universal language detection
-4. Later: Tasks 2.2-2.6: Server-side execution (Docker/gVisor)
-5. Consider: Add Monaco editor for better syntax highlighting
+3. ✅ Phase 2: Tasks 2.7-2.9 Complete (Tree-sitter + Agent Context)
+4. **Next:** Tasks 2.2-2.6: Server-side execution (Docker/gVisor)
+5. **Or:** Move to Phase 3: Intelligence Layer (RAG system)
+6. Consider: Add Monaco editor for better syntax highlighting
 
 ### Blockers
 - None critical
@@ -485,4 +497,6 @@ A phase is complete when:
 | 2026-01-15 | AI Architect | Task 0.6 complete: 78 unit tests (28 backend + 50 frontend) |
 | 2026-01-15 | AI Architect | Phase 2 started: Enhanced WebContainers with file browser, editor, tabs, console |
 | 2026-01-15 | AI Architect | Task 2.1 complete: ANSI stripping, Run Tests button, Docker Compose with Azure OpenAI |
+| 2026-01-15 | AI Architect | Tasks 2.7-2.8 complete: Tree-sitter 11 languages, symbol extraction, project stack detection |
+| 2026-01-15 | AI Architect | Task 2.9 complete: Agent context integration with intelligent code selection |
 
