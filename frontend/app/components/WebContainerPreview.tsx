@@ -54,7 +54,7 @@ function convertToWebContainerFiles(files: Record<string, string>) {
   return result;
 }
 
-// Default package.json for React + Vite
+// Default package.json for React + Vite + Testing
 const defaultPackageJson = {
   name: "preview-app",
   private: true,
@@ -64,18 +64,23 @@ const defaultPackageJson = {
     dev: "vite",
     build: "vite build",
     preview: "vite preview",
+    test: "vitest run",
   },
   dependencies: {
     react: "^18.2.0",
     "react-dom": "^18.2.0",
   },
   devDependencies: {
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
     "@vitejs/plugin-react": "^4.2.1",
+    jsdom: "^24.0.0",
     vite: "^5.1.0",
+    vitest: "^1.3.1",
   },
 };
 
-// Default vite.config.js
+// Default vite.config.js with vitest
 const defaultViteConfig = `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -85,7 +90,15 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.js',
+  },
 })`;
+
+// Default test setup file
+const defaultSetupTests = `import '@testing-library/jest-dom'`;
 
 // Default index.html
 const defaultIndexHtml = `<!DOCTYPE html>
@@ -146,6 +159,8 @@ export default function WebContainerPreview({
   const [status, setStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [isRunningTests, setIsRunningTests] = useState(false);
+  const [testResults, setTestResults] = useState<string | null>(null);
   const containerRef = useRef<WebContainer | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isBootingRef = useRef(false);
@@ -158,6 +173,46 @@ export default function WebContainerPreview({
     },
     [onTerminalOutput]
   );
+
+  // Run tests in WebContainer
+  const runTests = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container || isRunningTests) return;
+
+    setIsRunningTests(true);
+    setTestResults(null);
+    log("\n🧪 Running tests...\n");
+
+    try {
+      const testProcess = await container.spawn("npm", ["test", "--", "--watchAll=false"]);
+
+      let output = "";
+      testProcess.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            output += data;
+            log(data);
+          },
+        })
+      );
+
+      const exitCode = await testProcess.exit;
+
+      if (exitCode === 0) {
+        setTestResults("✅ All tests passed!");
+        log("\n✅ All tests passed!\n");
+      } else {
+        setTestResults(`❌ Tests failed (exit code: ${exitCode})`);
+        log(`\n❌ Tests failed (exit code: ${exitCode})\n`);
+      }
+    } catch (err: any) {
+      const message = err?.message || "Failed to run tests";
+      setTestResults(`❌ Error: ${message}`);
+      log(`\n❌ Test error: ${message}\n`);
+    } finally {
+      setIsRunningTests(false);
+    }
+  }, [isRunningTests, log]);
 
   // Boot WebContainer once (uses singleton)
   useEffect(() => {
@@ -250,6 +305,12 @@ export default function WebContainerPreview({
           filesToMount["/src/main.jsx"] = defaultMainJsx;
         }
 
+        // Add test setup file if there are test files
+        const hasTestFiles = Object.keys(filesToMount).some((f) => f.includes(".test."));
+        if (hasTestFiles && !Object.keys(filesToMount).some((f) => f.includes("setupTests"))) {
+          filesToMount["/src/setupTests.js"] = defaultSetupTests;
+        }
+
         setStatus("Mounting files...");
         log(`Mounting ${Object.keys(filesToMount).length} files...`);
 
@@ -315,6 +376,9 @@ export default function WebContainerPreview({
     );
   }
 
+  // Check if project has tests
+  const hasTests = Object.keys(files).some((f) => f.includes(".test."));
+
   return (
     <div className="h-full flex flex-col bg-zinc-950">
       {/* Status bar */}
@@ -325,7 +389,32 @@ export default function WebContainerPreview({
           }`}
         />
         <span className="text-zinc-400">{status}</span>
-        {url && (
+
+        {/* Test results badge */}
+        {testResults && (
+          <span className={`px-2 py-0.5 rounded ${
+            testResults.includes("✅") ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
+          }`}>
+            {testResults}
+          </span>
+        )}
+
+        {/* Run Tests button */}
+        {hasTests && url && (
+          <button
+            onClick={runTests}
+            disabled={isRunningTests}
+            className={`ml-auto px-3 py-1 rounded text-xs font-medium transition-colors ${
+              isRunningTests
+                ? "bg-zinc-700 text-zinc-400 cursor-wait"
+                : "bg-purple-600 hover:bg-purple-500 text-white"
+            }`}
+          >
+            {isRunningTests ? "Running..." : "🧪 Run Tests"}
+          </button>
+        )}
+
+        {url && !hasTests && (
           <span className="text-zinc-600 ml-auto truncate max-w-[200px]">
             {url}
           </span>
