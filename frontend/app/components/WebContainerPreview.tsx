@@ -285,15 +285,12 @@ export default function WebContainerPreview({
           };
         }
 
-        // Ensure we have package.json
-        if (!Object.keys(filesToMount).some((f) => f.includes("package.json"))) {
-          filesToMount["/package.json"] = JSON.stringify(defaultPackageJson, null, 2);
-        }
+        // Always use our package.json to ensure compatible dependencies
+        // (LLM-generated package.json may have version conflicts)
+        filesToMount["/package.json"] = JSON.stringify(defaultPackageJson, null, 2);
 
-        // Ensure we have vite.config
-        if (!Object.keys(filesToMount).some((f) => f.includes("vite.config"))) {
-          filesToMount["/vite.config.js"] = defaultViteConfig;
-        }
+        // Always use our vite.config for consistent setup
+        filesToMount["/vite.config.js"] = defaultViteConfig;
 
         // Ensure we have index.html
         if (!Object.keys(filesToMount).some((f) => f.includes("index.html"))) {
