@@ -2,8 +2,25 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // No COEP/COOP headers needed - Sandpack works without them
-  // (WebContainers required them but we switched to Sandpack)
+
+  // WebContainers require Cross-Origin Isolation (SharedArrayBuffer)
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

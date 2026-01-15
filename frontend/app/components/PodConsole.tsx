@@ -12,14 +12,27 @@ import {
   isErrorEvent
 } from "../hooks/useStreaming";
 
-// Dynamically import SandpackPreview to avoid SSR issues
+// Dynamically import WebContainerPreview to avoid SSR issues
+const WebContainerPreview = dynamic(() => import("./WebContainerPreview"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-zinc-950">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-zinc-400">Loading WebContainer...</p>
+      </div>
+    </div>
+  ),
+});
+
+// Dynamically import SandpackPreview for CODE tab (editor view)
 const SandpackPreview = dynamic(() => import("./SandpackPreview"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full bg-zinc-950">
       <div className="text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-zinc-400">Loading Preview...</p>
+        <p className="text-zinc-400">Loading Editor...</p>
       </div>
     </div>
   ),
@@ -473,15 +486,12 @@ export default function PodConsole() {
 
         {/* Content */}
         <div className="flex-1 min-h-0 bg-zinc-950">
-          {/* Preview Tab - Sandpack */}
+          {/* Preview Tab - WebContainer */}
           {rightTab === "PREVIEW" && (
             <div className="h-full">
-              <SandpackPreview
+              <WebContainerPreview
                 files={files}
-                activeFile={selectedFile || undefined}
-                showFileExplorer={false}
-                showEditor={false}
-                theme="dark"
+                onTerminalOutput={addTerminalLine}
               />
             </div>
           )}
