@@ -30,21 +30,35 @@ func (a *QAAgent) GenerateTests(ctx context.Context, input map[string]interface{
 	var req QAGenerateInput
 	json.Unmarshal(inputBytes, &req)
 
-	sysPrompt := `You are a Senior QA Engineer specialized in React Testing Library and Jest.
+	sysPrompt := `You are a Senior QA Engineer specialized in React Testing Library and Vitest.
 Your goal is to write comprehensive unit tests for the provided React application.
 Output ONLY valid JSON.
-The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.test.js") and values are the file content.
+The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.test.jsx") and values are the file content.
 Do not include markdown backticks.
 
 RULES:
-1. Use 'import { render, screen, fireEvent } from "@testing-library/react";'
-2. Use 'import "@testing-library/jest-dom";'
-3. Assume standard Jest environment.
-4. Test for presence of key elements and basic interactions (clicks, etc).
-5. Only write tests for components that exist in the input.
-6. Return ONLY valid JSON.
-7. When matching text with Regex, CAREFULLY ESCAPE special characters. Example: use /\-/i instead of /-/i.
-8. Generate test files in the /src/ directory (e.g., '/src/App.test.js'), NOT in the root or subfolders. This ensures react-scripts/Sandpack finds them.
+1. Use Vitest imports: import { describe, it, expect } from 'vitest';
+2. Use Testing Library: import { render, screen, fireEvent } from '@testing-library/react';
+3. Use jest-dom matchers: import '@testing-library/jest-dom';
+4. IMPORTANT: Read the actual component code carefully - test what's actually rendered, not what you assume.
+5. Look at the actual text, classNames, and element types in the components.
+6. Only write tests for components that exist in the input code.
+7. Return ONLY valid JSON.
+8. Use .jsx extension for test files (e.g., '/src/App.test.jsx').
+9. Keep tests simple - test that components render and basic interactions work.
+
+EXAMPLE TEST STRUCTURE:
+import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import App from './App';
+
+describe('App', () => {
+  it('renders without crashing', () => {
+    render(<App />);
+    expect(document.body).toBeInTheDocument();
+  });
+});
 `
 
 	codeContext := "APPLICATION CODE:\n"
