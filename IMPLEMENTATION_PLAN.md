@@ -51,14 +51,16 @@
 |-----------|-------------|--------|
 | Unit | WebContainers integration unit tests | 🔴 |
 | Unit | WebSocket endpoint tests | 🔴 |
-| Integration | Frontend ↔ Backend streaming | 🔴 |
-| E2E | Generate code → See in preview | 🔴 |
+| Integration | Frontend ↔ Backend streaming | 🟢 |
+| E2E | Generate code → See in preview | 🟢 |
+| E2E | Run tests in WebContainer | 🟢 |
+| E2E | Three-Strike feedback loop | 🟢 |
 | Performance | Streaming latency < 500ms | 🔴 |
 
 ### Exit Criteria
-- [ ] WebContainers boots and runs code in browser
-- [ ] Streaming WebSocket delivers incremental updates
-- [ ] User sees first output within 5 seconds
+- [x] WebContainers boots and runs code in browser
+- [x] Streaming WebSocket delivers incremental updates
+- [x] User sees first output within 5 seconds
 - [ ] All tests passing
 - [ ] Code reviewed and merged
 
@@ -375,48 +377,58 @@ A phase is complete when:
 
 ## Session Handoff Notes
 
-**Current Session:** 2026-01-15 (Updated 17:20 UTC)
+**Current Session:** 2026-01-15 (Updated 21:55 UTC)
 
-### What Was Done
+### What Was Done (Evening Session)
+- **Implemented Three-Strike Rule Feedback Loop:**
+  - Created TestRunner activity (`pkg/firm/activities/testrunner.go`)
+  - Added QA Agent RegenerateTests method for test retry with error feedback
+  - Updated ProjectLifecycle workflow with 3-attempt test loop
+  - Tests now run automatically after QA generates them
+  - If tests fail 3 times, escalates to REVIEW for human intervention
+
+- **Fixed WebContainer Test Execution:**
+  - Removed invalid `--watchAll=false` flag (Jest syntax, not Vitest)
+  - Tests now run correctly in frontend WebContainer
+
+- **Added Workflow Persistence on Page Refresh:**
+  - Workflow ID stored in localStorage
+  - URL parameter support (`?workflow=xxx`) for shareable links
+  - Auto-reconnect to existing workflow on page load
+  - Added "+ New Pod" button to start fresh projects
+
+- **Fixed QA Agent File Detection:**
+  - QA Agent now receives explicit list of existing files
+  - Prevents generating tests for non-existent component files
+  - Tests only target files that actually exist in the codebase
+
+- **E2E Testing Completed:**
+  - Calculator app: Tests passed on first attempt
+  - Appointment booking app: Generated successfully, tests ran through feedback loop
+  - Verified Three-Strike Rule works (regenerates tests on failure)
+
+### Previous Session (Afternoon)
 - Created comprehensive ARCHITECTURE.md (~2,200+ lines)
-- Added sections for:
-  - Agent Role Catalog (20+ specialist roles)
-  - Task Dependency Graph (DAG)
-  - Structured Output Contracts (SOC)
-  - Industry Patterns (MCP, A2A, Plan-and-Execute)
-  - HAP Filtering / Content Safety
-  - Multi-layer Sandbox Architecture
-- Pushed all changes to GitHub
-- **Completed Phase 0: Foundation (83%)**
-  - ✅ Task 0.1: Replaced Sandpack with WebContainers SDK
-  - ✅ Task 0.2: Implemented streaming WebSocket endpoint (pkg/streaming)
-  - ✅ Task 0.3: Created chunked generation protocol (18 event types)
-  - ✅ Task 0.4: Updated PodConsole with useStreaming hook
-  - ✅ Task 0.5: Added ErrorBoundary component
-  - 🔴 Task 0.6: Integration tests (remaining)
-- **E2E Validation Completed:**
-  - Two-column layout renders correctly
-  - PM Agent chat working
-  - WebContainers boots and installs deps
-  - WebSocket hub logs connections
-  - Known issue: "Insufficient resources" in some browsers
+- Completed Phase 0: Foundation (83%)
+- E2E Validation: WebContainers, PM Agent, streaming all working
 
 ### Next Steps
-1. Complete Phase 0: Task 0.6 (Integration tests)
+1. Complete Phase 0: Task 0.6 (Formal integration test suite)
 2. Begin Phase 1: Agent Core
    - AgentInstance struct + lifecycle
    - AgentPool manager
    - Skill loading from YAML
    - SOC (Structured Output Contracts)
+3. Consider: Improve QA Agent test quality (reduce Three-Strike failures)
 
 ### Blockers
 - None critical
-- Minor: WebSocket browser resource limits (non-blocking)
+- Minor: WebContainer "Upgrade Required" on free tier limits (non-blocking)
 
 ### Notes for Next Session
-- Consider simplifying WebSocket reconnection logic
-- Add integration tests for WebSocket flow
-- Start with AgentInstance struct in Phase 1
+- Three-Strike feedback loop is working but could be improved
+- Consider adding more context to QA Agent for better first-attempt tests
+- May want to add test result display in UI (currently only in terminal)
 
 ---
 
@@ -428,4 +440,8 @@ A phase is complete when:
 | 2026-01-15 | AI Architect | Task 0.1 complete: WebContainers replaces Sandpack |
 | 2026-01-15 | AI Architect | Tasks 0.2-0.5 complete: Streaming + Error Boundary |
 | 2026-01-15 | AI Architect | E2E validation completed, minor issues noted |
+| 2026-01-15 | AI Architect | Implemented Three-Strike Rule feedback loop for QA tests |
+| 2026-01-15 | AI Architect | Fixed WebContainer test command (Vitest syntax) |
+| 2026-01-15 | AI Architect | Added workflow persistence (localStorage + URL params) |
+| 2026-01-15 | AI Architect | Fixed QA Agent to only test existing files |
 
