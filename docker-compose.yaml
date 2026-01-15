@@ -1,0 +1,60 @@
+version: '3.5'
+
+services:
+  # 1. PostgreSQL (For Temporal)
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=temporal
+    ports:
+      - 5432:5432
+    networks:
+      - sovereign-net
+
+  # 2. Temporal Server
+  temporal:
+    image: temporalio/auto-setup:1.21.3
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - 7233:7233
+    depends_on:
+      - postgres
+    networks:
+      - sovereign-net
+
+  # 3. Temporal UI
+  temporal-ui:
+    image: temporalio/ui:2.25.0
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - 8088:8080
+    depends_on:
+      - temporal
+    networks:
+      - sovereign-net
+
+  # 4. ChromaDB (Vector Store)
+  chroma:
+    image: chromadb/chroma:0.5.5
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=False
+    ports:
+      - 8000:8000
+    volumes:
+      - ./chroma-data:/chroma/chroma
+    networks:
+      - sovereign-net
+
+networks:
+  sovereign-net:
+    driver: bridge

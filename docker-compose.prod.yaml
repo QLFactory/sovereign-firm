@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # --- Infrastructure ---
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    networks:
+      - sovereign-net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:1.21.3
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sovereign-net
+    ports:
+      - "7233:7233" # GRPC exposed for external workers if needed
+
+  temporal-ui:
+    image: temporalio/ui:2.25.0
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8088:8080"
+    networks:
+      - sovereign-net
+    depends_on:
+      - temporal
+
+  chroma:
+    image: chromadb/chroma:0.5.5
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - sovereign-net
+
+  # --- Application Services ---
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    command: [ "/app/orchestrator" ]
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434} # Access host Ollama
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - CHROMA_HOST=http://chroma:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+      - chroma
+    networks:
+      - sovereign-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    command: [ "/app/worker" ]
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - CHROMA_HOST=http://chroma:8000
+    depends_on:
+      - temporal
+      - orchestrator
+    networks:
+      - sovereign-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    environment:
+      - API_URL=http://orchestrator:8080
+    ports:
+      - "3000:3000"
+    networks:
+      - sovereign-net
+    depends_on:
+      - orchestrator
+
+networks:
+  sovereign-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  chroma_data:

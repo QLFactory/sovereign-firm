@@ -1,0 +1,37 @@
+# Binaries
+/bin/
+/dist/
+/out/
+*.exe
+*.test
+*.out
+
+# Node
+node_modules/
+.next/
+npm-debug.log
+
+# Go
+go.work
+go.work.sum
+
+# Environment
+.env
+.env.local
+
+# Docker
+docker-compose.override.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MacOS
+.DS_Store
+
+# Brain/Artifacts (Don't version the Agent's brain unless requested, but maybe user wants it?)
+# Typically we exclude large artifacts.
+# For now, let's include brain for history, but maybe exclude the large Chroma DB files if they were local?
+# The chroma db is in docker volume, not here.

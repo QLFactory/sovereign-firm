@@ -1,0 +1,36 @@
+# Build Stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Dependency Caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Source Code
+COPY . .
+
+# Build Orchestrator
+RUN go build -o /bin/orchestrator ./cmd/orchestrator/main.go
+
+# Build Worker
+RUN go build -o /bin/worker ./cmd/worker/main.go
+
+# Production Stage
+FROM alpine:latest
+
+WORKDIR /app
+RUN apk --no-cache add ca-certificates
+
+# Copy Binaries
+COPY --from=builder /bin/orchestrator /app/orchestrator
+COPY --from=builder /bin/worker /app/worker
+
+# Copy .env (optional, usually injected/mounted at runtime in true prod)
+# COPY .env .env 
+
+# Expose API Port
+EXPOSE 8080
+
+# Default entrypoint (can be overridden)
+CMD ["/app/orchestrator"]
