@@ -1,9 +1,12 @@
 import PodConsole from "./components/PodConsole";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-black">
-      <PodConsole />
+      <ErrorBoundary>
+        <PodConsole />
+      </ErrorBoundary>
     </main>
   );
 }
