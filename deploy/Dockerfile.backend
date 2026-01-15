@@ -22,17 +22,20 @@ FROM alpine:latest
 WORKDIR /app
 
 # Install Node.js for TestRunner activity (runs Vitest tests)
-RUN apk --no-cache add ca-certificates nodejs npm
+RUN apk --no-cache add ca-certificates nodejs npm bash
 
 # Copy Binaries
 COPY --from=builder /bin/orchestrator /app/orchestrator
 COPY --from=builder /bin/worker /app/worker
 
-# Copy .env (optional, usually injected/mounted at runtime in true prod)
-# COPY .env .env 
+# Create entrypoint script to run both worker and orchestrator
+RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
+    echo '/app/worker &' >> /app/entrypoint.sh && \
+    echo 'exec /app/orchestrator' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
 # Expose API Port
 EXPOSE 8080
 
-# Default entrypoint (can be overridden)
-CMD ["/app/orchestrator"]
+# Run both worker and orchestrator
+CMD ["/app/entrypoint.sh"]

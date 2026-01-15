@@ -385,16 +385,19 @@ A phase is complete when:
 
 ## Session Handoff Notes
 
-**Current Session:** 2026-01-15 (Updated 22:45 UTC)
+**Current Session:** 2026-01-15 (Updated 23:30 UTC)
 
 ### What Was Done (Late Evening - Phase 2)
-- **Enhanced WebContainers (Task 2.1):**
+- **Enhanced WebContainers (Task 2.1) - COMPLETE:**
   - Added **File Browser** panel with tree view, icons, expand/collapse
   - Added **Code Editor** with line numbers, syntax highlighting, Cmd+S save
   - Added **Tab System** (Preview / Files / Console)
   - Added **Console Output** panel with color-coded logs (errors red, success green)
   - Added **File Save** to WebContainer filesystem (triggers Vite HMR)
   - Added **Refresh Preview** button for manual refresh
+  - Added **ANSI escape code stripping** for clean console output
+  - **Run Tests button** - executes Vitest, shows pass/fail badge
+  - **Playwright E2E testing** verified all features work correctly
 
 - **New Components Created:**
   - `frontend/app/components/FileBrowser.tsx` - Tree view file browser
@@ -402,6 +405,17 @@ A phase is complete when:
 
 - **Updated tsconfig.json:**
   - Excluded test files from Next.js build to fix TypeScript errors
+
+- **Docker Compose Setup:**
+  - Updated `docker-compose.yaml` with Azure OpenAI environment variables
+  - Updated `deploy/Dockerfile.backend` with entrypoint for worker + orchestrator
+  - All services now run via Docker (Postgres, Temporal, ChromaDB, Backend, Frontend)
+  - Added `.env.example` for Azure OpenAI configuration
+
+- **E2E Test Results:**
+  - Created counter app project via Playwright automation
+  - Code generated successfully by Azure OpenAI (GPT-4)
+  - Tests ran in WebContainer: **✅ All tests passed!**
 
 ### What Was Done (Evening Session)
 - **Implemented Three-Strike Rule Feedback Loop:**
@@ -439,11 +453,10 @@ A phase is complete when:
 ### Next Steps
 1. ✅ Phase 0: Task 0.6 Complete (78 unit tests)
 2. ✅ Phase 2: Task 2.1 Complete (WebContainers enhancement)
-3. Continue Phase 2:
+3. **IN PROGRESS** Phase 2: Tasks 2.7-2.8
    - Task 2.7: Tree-sitter integration for code analysis
    - Task 2.8: Universal language detection
-   - Tasks 2.2-2.6: Server-side execution (Docker/gVisor) - lower priority
-4. Consider: Improve QA Agent test quality (reduce Three-Strike failures)
+4. Later: Tasks 2.2-2.6: Server-side execution (Docker/gVisor)
 5. Consider: Add Monaco editor for better syntax highlighting
 
 ### Blockers
@@ -471,4 +484,5 @@ A phase is complete when:
 | 2026-01-15 | AI Architect | Fixed QA Agent to only test existing files |
 | 2026-01-15 | AI Architect | Task 0.6 complete: 78 unit tests (28 backend + 50 frontend) |
 | 2026-01-15 | AI Architect | Phase 2 started: Enhanced WebContainers with file browser, editor, tabs, console |
+| 2026-01-15 | AI Architect | Task 2.1 complete: ANSI stripping, Run Tests button, Docker Compose with Azure OpenAI |
 

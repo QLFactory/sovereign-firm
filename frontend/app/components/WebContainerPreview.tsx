@@ -13,6 +13,12 @@ interface WebContainerPreviewProps {
   onFilesChange?: (files: Record<string, string>) => void;
 }
 
+// Strip ANSI escape codes from terminal output
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+}
+
 // Singleton WebContainer instance - can only boot once per page
 let webcontainerInstance: WebContainer | null = null;
 let bootPromise: Promise<WebContainer> | null = null;
@@ -184,9 +190,14 @@ export default function WebContainerPreview({
 
   const log = useCallback(
     (message: string) => {
-      console.log(`[WebContainer] ${message}`);
-      onTerminalOutput?.(message);
-      setConsoleOutput((prev) => [...prev.slice(-500), message]); // Keep last 500 lines
+      const cleanMessage = stripAnsi(message);
+      // Skip empty lines and spinner-only lines
+      if (!cleanMessage.trim() || cleanMessage.trim().match(/^[-\\|/]+$/)) {
+        return;
+      }
+      console.log(`[WebContainer] ${cleanMessage}`);
+      onTerminalOutput?.(cleanMessage);
+      setConsoleOutput((prev) => [...prev.slice(-500), cleanMessage]); // Keep last 500 lines
     },
     [onTerminalOutput]
   );
