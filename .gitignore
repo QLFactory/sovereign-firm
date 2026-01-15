@@ -5,6 +5,8 @@
 *.exe
 *.test
 *.out
+orchestrator
+worker
 
 # Node
 node_modules/
