@@ -11,7 +11,7 @@
 
 | Phase | Status | Progress | Start Date | End Date |
 |-------|--------|----------|------------|----------|
-| Phase 0: Foundation | 🟡 In Progress | 17% | 2026-01-15 | - |
+| Phase 0: Foundation | 🟡 In Progress | 67% | 2026-01-15 | - |
 | Phase 1: Agent Core | 🔴 Not Started | 0% | - | - |
 | Phase 2: Execution Layer | 🔴 Not Started | 0% | - | - |
 | Phase 3: Intelligence Layer | 🔴 Not Started | 0% | - | - |
@@ -39,9 +39,9 @@
 | ID | Task | Status | Owner | Notes |
 |----|------|--------|-------|-------|
 | 0.1 | Replace Sandpack with WebContainers SDK | 🟢 | AI | Completed - PodConsole.tsx rewritten |
-| 0.2 | Implement streaming WebSocket endpoint | 🔴 | - | Backend change |
-| 0.3 | Create chunked generation protocol | 🔴 | - | Define message format |
-| 0.4 | Update PodConsole for streaming | 🔴 | - | Integrate with 0.1-0.3 |
+| 0.2 | Implement streaming WebSocket endpoint | 🟢 | AI | Completed - pkg/streaming + orchestrator |
+| 0.3 | Create chunked generation protocol | 🟢 | AI | Completed - protocol.go defines all event types |
+| 0.4 | Update PodConsole for streaming | 🟢 | AI | Completed - useStreaming hook + event handling |
 | 0.5 | Add basic error boundary | 🔴 | - | Frontend resilience |
 | 0.6 | Write integration tests | 🔴 | - | E2E test suite |
 

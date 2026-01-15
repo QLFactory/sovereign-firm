@@ -11,10 +11,14 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/qlfactory/sovereign-firm/pkg/firm/workflows"
+	"github.com/qlfactory/sovereign-firm/pkg/streaming"
 	"go.temporal.io/sdk/client"
 )
 
-var temporalClient client.Client
+var (
+	temporalClient client.Client
+	streamHub      *streaming.Hub
+)
 
 func main() {
 	// Load .env file
@@ -36,8 +40,14 @@ func main() {
 	}
 	defer temporalClient.Close()
 
+	// Initialize streaming hub
+	streamHub = streaming.NewHub()
+	go streamHub.Run()
+	log.Println("Streaming hub started")
+
+	// HTTP routes
 	http.HandleFunc("/api/pods", handlePods)       // POST start
-	http.HandleFunc("/api/pods/", handlePodAction) // POST message, GET status
+	http.HandleFunc("/api/pods/", handlePodAction) // POST message, GET status, WS stream
 	http.HandleFunc("/health", healthHandler)
 
 	port := os.Getenv("PORT")
@@ -45,6 +55,7 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Orchestrator listening on :%s", port)
+	log.Printf("WebSocket endpoint: ws://localhost:%s/api/pods/{id}/stream", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
@@ -57,7 +68,7 @@ func handlePods(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePodAction(w http.ResponseWriter, r *http.Request) {
-	// /api/pods/{id} or /api/pods/{id}/message
+	// /api/pods/{id} or /api/pods/{id}/message or /api/pods/{id}/stream
 	pathParts := strings.Split(r.URL.Path, "/")
 	if len(pathParts) < 4 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -65,12 +76,21 @@ func handlePodAction(w http.ResponseWriter, r *http.Request) {
 	}
 	workflowID := pathParts[3]
 
+	// GET /api/pods/{id} - Get status
 	if len(pathParts) == 4 && r.Method == http.MethodGet {
 		getPodStatusHandler(w, r, workflowID)
 		return
 	}
+
+	// POST /api/pods/{id}/message - Send message
 	if len(pathParts) == 5 && pathParts[4] == "message" && r.Method == http.MethodPost {
 		sendMessageHandler(w, r, workflowID)
+		return
+	}
+
+	// GET /api/pods/{id}/stream - WebSocket stream
+	if len(pathParts) == 5 && pathParts[4] == "stream" {
+		handleStreamWebSocket(w, r, workflowID)
 		return
 	}
 
@@ -99,8 +119,13 @@ func startPodHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	workflowID := we.GetID()
+
+	// Broadcast phase change event
+	streamHub.BroadcastPhaseChange(workflowID, "", "DISCOVERY", "Project workflow started")
+
 	json.NewEncoder(w).Encode(map[string]string{
-		"workflow_id": we.GetID(),
+		"workflow_id": workflowID,
 		"run_id":      we.GetRunID(),
 	})
 }
@@ -116,10 +141,14 @@ func sendMessageHandler(w http.ResponseWriter, r *http.Request, workflowID strin
 		return
 	}
 
+	// Broadcast user message to connected clients
+	streamHub.BroadcastChatMessage(workflowID, "user", "", req.Message)
+
 	// Send Signal to Temporal
 	signal := workflows.UserMessageSignal{Message: req.Message}
 	err := temporalClient.SignalWorkflow(context.Background(), workflowID, "", "USER_MESSAGE", signal)
 	if err != nil {
+		streamHub.BroadcastError(workflowID, "SIGNAL_FAILED", "Failed to send message", err.Error())
 		http.Error(w, fmt.Sprintf("Failed to signal workflow: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -130,7 +159,6 @@ func sendMessageHandler(w http.ResponseWriter, r *http.Request, workflowID strin
 
 func getPodStatusHandler(w http.ResponseWriter, r *http.Request, workflowID string) {
 	// Query the workflow state
-
 	resp, err := temporalClient.QueryWorkflow(context.Background(), workflowID, "", "get_state")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Query failed (workflow running?): %v", err), http.StatusInternalServerError)
@@ -146,6 +174,17 @@ func getPodStatusHandler(w http.ResponseWriter, r *http.Request, workflowID stri
 	json.NewEncoder(w).Encode(state)
 }
 
+func handleStreamWebSocket(w http.ResponseWriter, r *http.Request, workflowID string) {
+	log.Printf("WebSocket connection request for workflow: %s", workflowID)
+	streamHub.ServeWs(w, r, workflowID)
+}
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy","streaming":true}`))
+}
+
+// GetStreamHub returns the global stream hub (for use by activities)
+func GetStreamHub() *streaming.Hub {
+	return streamHub
 }

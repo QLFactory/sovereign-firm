@@ -5,6 +5,15 @@ import { WebContainer, FileSystemTree } from "@webcontainer/api";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
+import {
+  useStreaming,
+  StreamEvent,
+  isPhaseChangeEvent,
+  isCodeChunkEvent,
+  isChatMessageEvent,
+  isFileStartEvent,
+  isErrorEvent
+} from "../hooks/useStreaming";
 
 // Convert flat file map to WebContainer file tree format
 function convertToFileTree(files: Record<string, string>): FileSystemTree {
@@ -126,6 +135,7 @@ export default function PodConsole() {
   const [activeTab, setActiveTab] = useState<"CHAT" | "SPEC">("CHAT");
   const [rightTab, setRightTab] = useState<"PREVIEW" | "TERMINAL" | "TESTS">("PREVIEW");
   const [projectSpec, setProjectSpec] = useState("");
+  const [currentPhase, setCurrentPhase] = useState("DISCOVERY");
 
   // WebContainer state
   const [files, setFiles] = useState<Record<string, string>>(defaultFiles);
@@ -133,11 +143,86 @@ export default function PodConsole() {
   const [isBooting, setIsBooting] = useState(true);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
 
+  // Streaming state
+  const [streamingFiles, setStreamingFiles] = useState<Record<string, string>>({});
+  const fileBuffersRef = useRef<Record<string, string[]>>({});
+
   // Refs
   const webcontainerRef = useRef<WebContainer | null>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<Terminal | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Handle streaming events
+  const handleStreamEvent = useCallback((event: StreamEvent) => {
+    console.log("Stream event:", event.type, event.payload);
+
+    if (isPhaseChangeEvent(event)) {
+      setCurrentPhase(event.payload.current_phase);
+      setStatus(`Phase: ${event.payload.current_phase}`);
+      addTerminalLine(`\n📍 Phase: ${event.payload.current_phase}`);
+    }
+
+    if (isChatMessageEvent(event)) {
+      const { role, agent, content } = event.payload;
+      const prefix = role === "user" ? "You" : agent || "Agent";
+      setChatHistory((prev) => prev + `\n${prefix}: ${content}`);
+    }
+
+    if (isFileStartEvent(event)) {
+      const { file_path, language } = event.payload;
+      addTerminalLine(`\n📝 Generating: ${file_path} (${language})`);
+      fileBuffersRef.current[file_path] = [];
+    }
+
+    if (isCodeChunkEvent(event)) {
+      const { file_path, content, is_complete } = event.payload;
+
+      // Accumulate chunks
+      if (!fileBuffersRef.current[file_path]) {
+        fileBuffersRef.current[file_path] = [];
+      }
+      fileBuffersRef.current[file_path].push(content);
+
+      // Update streaming preview
+      setStreamingFiles((prev) => ({
+        ...prev,
+        [file_path]: fileBuffersRef.current[file_path].join(""),
+      }));
+
+      // When complete, add to actual files
+      if (is_complete) {
+        const fullContent = fileBuffersRef.current[file_path].join("");
+        setFiles((prev) => ({
+          ...prev,
+          [file_path]: fullContent,
+        }));
+        addTerminalLine(`✅ Complete: ${file_path}`);
+      }
+    }
+
+    if (isErrorEvent(event)) {
+      const { code, message } = event.payload;
+      addTerminalLine(`\n❌ Error [${code}]: ${message}`);
+      setStatus(`Error: ${message}`);
+    }
+  }, []);
+
+  // Streaming hook
+  const { isConnected: isStreaming } = useStreaming({
+    workflowId: workflowID,
+    onEvent: handleStreamEvent,
+    onConnect: () => {
+      console.log("Streaming connected");
+      addTerminalLine("\n🔌 Streaming connected");
+    },
+    onDisconnect: () => {
+      console.log("Streaming disconnected");
+    },
+    onError: (err) => {
+      console.error("Streaming error:", err);
+    },
+  });
 
   // Boot WebContainer
   useEffect(() => {
