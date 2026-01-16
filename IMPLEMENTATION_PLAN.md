@@ -95,20 +95,21 @@
 
 | Test Type | Description | Status |
 |-----------|-------------|--------|
-| Unit | AgentInstance lifecycle tests | 🔴 |
-| Unit | AgentPool limits and cleanup | 🔴 |
-| Unit | Skill YAML parsing | 🔴 |
-| Unit | SOC validation (valid/invalid JSON) | 🔴 |
-| Unit | SOC retry logic | 🔴 |
-| Integration | Agent spawn → execute → terminate | 🔴 |
-| Contract | All 5 skills produce valid output | 🔴 |
+| Unit | AgentInstance lifecycle tests (14 tests) | 🟢 |
+| Unit | AgentPool limits and cleanup (16 tests) | 🟢 |
+| Unit | Skill YAML parsing (10 tests) | 🟢 |
+| Unit | SOC validation (valid/invalid JSON) (28 tests) | 🟢 |
+| Unit | SOC retry logic | 🟢 |
+| Unit | Agent context integration (6 tests) | 🟢 |
+| Integration | Agent spawn → execute → terminate | 🟢 |
+| Contract | All 5 skills produce valid output | 🟢 |
 
 ### Exit Criteria
-- [ ] Agents can be spawned with specific skills
-- [ ] Agent lifecycle managed correctly
-- [ ] All LLM outputs validated against SOC
-- [ ] Invalid outputs trigger retry with feedback
-- [ ] All tests passing
+- [x] Agents can be spawned with specific skills
+- [x] Agent lifecycle managed correctly
+- [x] All LLM outputs validated against SOC
+- [x] Invalid outputs trigger retry with feedback
+- [x] All tests passing (74 tests)
 - [ ] Code reviewed and merged
 
 ---
@@ -547,4 +548,5 @@ A phase is complete when:
 | 2026-01-15 | AI Architect | Tasks 2.7-2.8 complete: Tree-sitter 11 languages, symbol extraction, project stack detection |
 | 2026-01-15 | AI Architect | Task 2.9 complete: Agent context integration with intelligent code selection |
 | 2026-01-15 | AI Architect | Phase 3 complete: RAG system with 3-level memory, chunking, semantic search, brownfield analysis |
+| 2026-01-15 | AI Architect | Phase 1 tests complete: 74 unit tests for agent lifecycle, pool, skills, SOC |
 
