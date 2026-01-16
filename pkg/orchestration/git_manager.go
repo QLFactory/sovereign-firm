@@ -80,7 +80,16 @@ func (m *GitBranchManager) CreateAgentBranch(agentID, taskID string) (*AgentBran
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	branchName := fmt.Sprintf("agent/%s/%s", agentID[:8], taskID[:8])
+	// Safely truncate IDs to max 8 characters
+	agentPrefix := agentID
+	if len(agentPrefix) > 8 {
+		agentPrefix = agentPrefix[:8]
+	}
+	taskPrefix := taskID
+	if len(taskPrefix) > 8 {
+		taskPrefix = taskPrefix[:8]
+	}
+	branchName := fmt.Sprintf("agent/%s/%s", agentPrefix, taskPrefix)
 
 	// Get the HEAD of base branch
 	baseRef, err := m.repo.Reference(plumbing.NewBranchReferenceName(m.baseBranch), true)
