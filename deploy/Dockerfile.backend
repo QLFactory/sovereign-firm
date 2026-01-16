@@ -1,6 +1,9 @@
 # Build Stage
 FROM golang:1.24-alpine AS builder
 
+# Install build dependencies for CGO (required by tree-sitter)
+RUN apk --no-cache add gcc g++ musl-dev
+
 WORKDIR /app
 
 # Dependency Caching
