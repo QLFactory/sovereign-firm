@@ -13,8 +13,26 @@ import {
   isCodeChunkEvent,
   isChatMessageEvent,
   isFileStartEvent,
-  isErrorEvent
+  isErrorEvent,
+  // Phase 4 event type guards
+  isDAGUpdateEvent,
+  isTaskStartedEvent,
+  isTaskCompletedEvent,
+  isTaskFailedEvent,
+  isAgentAssignedEvent,
+  isCIStageEvent,
+  isExecutionEvent,
+  // Phase 4 types
+  DAGState,
+  ActiveAgent,
+  CIStageResult,
 } from "../hooks/useStreaming";
+
+// Phase 4 components
+import DAGProgressDashboard from "./DAGProgressDashboard";
+import AgentActivityPanel from "./AgentActivityPanel";
+import CIStatusPanel from "./CIStatusPanel";
+import ExecutionEventFeed from "./ExecutionEventFeed";
 
 // Dynamically import WebContainerPreview to avoid SSR issues
 const WebContainerPreview = dynamic(() => import("./WebContainerPreview"), {
@@ -62,8 +80,15 @@ export default function PodConsole() {
   const [chatHistory, setChatHistory] = useState<string>("");
   const [input, setInput] = useState("");
   const [status, setStatus] = useState("Initializing...");
-  const [activeTab, setActiveTab] = useState<"CHAT" | "SPEC" | "FILES">("CHAT");
-  const [rightTab, setRightTab] = useState<"PREVIEW" | "CODE" | "TERMINAL">("PREVIEW");
+  const [activeTab, setActiveTab] = useState<"CHAT" | "SPEC" | "FILES" | "TASKS" | "AGENTS">("CHAT");
+  const [rightTab, setRightTab] = useState<"PREVIEW" | "CODE" | "TERMINAL" | "CI" | "EVENTS">("PREVIEW");
+
+  // Phase 4: Multi-Agent Coordination State
+  const [dagState, setDagState] = useState<DAGState | null>(null);
+  const [activeAgents, setActiveAgents] = useState<ActiveAgent[]>([]);
+  const [ciStages, setCIStages] = useState<CIStageResult[]>([]);
+  const [currentCIStage, setCurrentCIStage] = useState<"LINT" | "BUILD" | "TEST" | null>(null);
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
   const [projectSpec, setProjectSpec] = useState("");
   const [currentPhase, setCurrentPhase] = useState("DISCOVERY");
 
@@ -175,6 +200,113 @@ export default function PodConsole() {
       addTerminalLine(`\n❌ Error [${code}]: ${message}`);
       setStatus(`Error: ${message}`);
     }
+
+    // Phase 4: Multi-Agent Coordination Events
+    if (isDAGUpdateEvent(event)) {
+      setDagState(event.payload);
+      addTerminalLine(`📊 DAG Update: ${event.payload.completed}/${event.payload.total} tasks`);
+    }
+
+    if (isTaskStartedEvent(event)) {
+      const { task_id, task_name, agent_id } = event.payload;
+      addTerminalLine(`▶️ Task Started: ${task_name}`);
+      if (agent_id) {
+        // Add to active agents
+        setActiveAgents((prev) => {
+          const existing = prev.find((a) => a.task_id === task_id);
+          if (existing) return prev;
+          return [
+            ...prev,
+            {
+              task_id,
+              agent_id,
+              agent_name: agent_id, // Will be updated by AGENT_ASSIGNED
+              task_name,
+              started_at: event.timestamp,
+            },
+          ];
+        });
+      }
+    }
+
+    if (isTaskCompletedEvent(event)) {
+      const { task_id, task_name } = event.payload;
+      addTerminalLine(`✅ Task Completed: ${task_name}`);
+      // Remove from active agents
+      setActiveAgents((prev) => prev.filter((a) => a.task_id !== task_id));
+    }
+
+    if (isTaskFailedEvent(event)) {
+      const { task_id, task_name, error } = event.payload;
+      addTerminalLine(`❌ Task Failed: ${task_name} - ${error}`);
+      // Remove from active agents
+      setActiveAgents((prev) => prev.filter((a) => a.task_id !== task_id));
+    }
+
+    if (isAgentAssignedEvent(event)) {
+      const { task_id, agent_id, agent_name } = event.payload;
+      addTerminalLine(`🤖 Agent Assigned: ${agent_name} → ${task_id.slice(0, 8)}`);
+      // Update active agent info
+      setActiveAgents((prev) => {
+        const idx = prev.findIndex((a) => a.task_id === task_id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], agent_name, agent_id };
+          return updated;
+        }
+        return prev;
+      });
+    }
+
+    if (isCIStageEvent(event)) {
+      const { stage, success, output, error } = event.payload;
+      const stageName = stage as "LINT" | "BUILD" | "TEST";
+
+      if (event.type === "CI_STAGE_START") {
+        setCurrentCIStage(stageName);
+        addTerminalLine(`🔄 CI Stage: ${stage} starting...`);
+      } else if (event.type === "CI_STAGE_COMPLETE" || event.type === "CI_STAGE_FAILED") {
+        setCurrentCIStage(null);
+        setCIStages((prev) => {
+          // Update or add stage result
+          const idx = prev.findIndex((s) => s.stage === stageName);
+          const result: CIStageResult = {
+            stage: stageName,
+            success: success || false,
+            output,
+            error,
+          };
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = result;
+            return updated;
+          }
+          return [...prev, result];
+        });
+        if (success) {
+          addTerminalLine(`✅ CI Stage: ${stage} passed`);
+        } else {
+          addTerminalLine(`❌ CI Stage: ${stage} failed - ${error}`);
+        }
+      }
+    }
+
+    if (isExecutionEvent(event)) {
+      const { message } = event.payload;
+      if (event.type === "EXECUTION_STARTED") {
+        addTerminalLine(`🚀 Execution Started: ${message}`);
+        setStatus("Multi-Agent Executing...");
+      } else if (event.type === "EXECUTION_COMPLETED") {
+        addTerminalLine(`🏁 Execution Completed: ${message}`);
+        setStatus("Execution Complete");
+      } else if (event.type === "EXECUTION_FAILED") {
+        addTerminalLine(`💥 Execution Failed: ${message}`);
+        setStatus("Execution Failed");
+      }
+    }
+
+    // Track all events for the event feed
+    setStreamEvents((prev) => [...prev.slice(-200), event]); // Keep last 200 events
   }, [addTerminalLine, selectedFile]);
 
   // Streaming hook
@@ -365,6 +497,12 @@ export default function PodConsole() {
     setTerminalOutput([]);
     setStatus("Starting new pod...");
     fileBuffersRef.current = {};
+    // Reset Phase 4 state
+    setDagState(null);
+    setActiveAgents([]);
+    setCIStages([]);
+    setCurrentCIStage(null);
+    setStreamEvents([]);
 
     // Create new pod
     try {
@@ -488,8 +626,8 @@ export default function PodConsole() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1">
-            {(["CHAT", "SPEC", "FILES"] as const).map((tab) => (
+          <div className="flex gap-1 flex-wrap">
+            {(["CHAT", "SPEC", "FILES", "TASKS", "AGENTS"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -499,9 +637,21 @@ export default function PodConsole() {
                     : "bg-zinc-800 text-zinc-400 hover:text-white"
                 }`}
               >
+                {tab === "TASKS" && "📊 "}
+                {tab === "AGENTS" && "🤖 "}
                 {tab}
                 {tab === "FILES" && fileList.length > 0 && (
                   <span className="ml-1 bg-zinc-700 px-1.5 rounded">{fileList.length}</span>
+                )}
+                {tab === "TASKS" && dagState && (
+                  <span className="ml-1 bg-zinc-700 px-1.5 rounded">
+                    {dagState.completed}/{dagState.total}
+                  </span>
+                )}
+                {tab === "AGENTS" && activeAgents.length > 0 && (
+                  <span className="ml-1 bg-green-700 px-1.5 rounded animate-pulse">
+                    {activeAgents.length}
+                  </span>
                 )}
               </button>
             ))}
@@ -566,6 +716,28 @@ export default function PodConsole() {
               )}
             </div>
           )}
+
+          {/* Phase 4: Tasks (DAG) Tab */}
+          {activeTab === "TASKS" && (
+            <DAGProgressDashboard
+              dagState={dagState}
+              onTaskClick={(task) => {
+                console.log("Task clicked:", task);
+                addTerminalLine(`📋 Selected task: ${task.name} (${task.status})`);
+              }}
+            />
+          )}
+
+          {/* Phase 4: Agents Tab */}
+          {activeTab === "AGENTS" && (
+            <AgentActivityPanel
+              activeAgents={activeAgents}
+              onAgentClick={(agent) => {
+                console.log("Agent clicked:", agent);
+                addTerminalLine(`🤖 Selected agent: ${agent.agent_name} working on ${agent.task_name}`);
+              }}
+            />
+          )}
         </div>
 
         {/* Input */}
@@ -599,12 +771,12 @@ export default function PodConsole() {
       {/* Right Panel - Preview/Code/Terminal */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Tab Bar */}
-        <div className="flex text-sm font-medium border-b border-zinc-800 bg-zinc-900">
-          {(["PREVIEW", "CODE", "TERMINAL"] as const).map((tab) => (
+        <div className="flex text-sm font-medium border-b border-zinc-800 bg-zinc-900 overflow-x-auto">
+          {(["PREVIEW", "CODE", "TERMINAL", "CI", "EVENTS"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setRightTab(tab)}
-              className={`px-6 py-3 transition-colors ${
+              className={`px-4 py-3 transition-colors whitespace-nowrap flex items-center gap-1 ${
                 rightTab === tab
                   ? "bg-zinc-800 text-white border-b-2 border-blue-500"
                   : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
@@ -613,7 +785,22 @@ export default function PodConsole() {
               {tab === "PREVIEW" && "▶ "}
               {tab === "CODE" && "📝 "}
               {tab === "TERMINAL" && "⌨ "}
+              {tab === "CI" && "🔧 "}
+              {tab === "EVENTS" && "📡 "}
               {tab}
+              {tab === "CI" && ciStages.length > 0 && (
+                <span className={`ml-1 text-xs px-1.5 rounded ${
+                  ciStages.some(s => !s.success) ? "bg-red-700" :
+                  ciStages.length === 3 ? "bg-green-700" : "bg-yellow-700"
+                }`}>
+                  {ciStages.filter(s => s.success).length}/3
+                </span>
+              )}
+              {tab === "EVENTS" && streamEvents.length > 0 && (
+                <span className="ml-1 text-xs bg-zinc-700 px-1.5 rounded">
+                  {streamEvents.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -666,6 +853,35 @@ export default function PodConsole() {
               ) : (
                 <div className="text-zinc-600">Waiting for activity...</div>
               )}
+            </div>
+          )}
+
+          {/* CI Tab - Phase 4 */}
+          {rightTab === "CI" && (
+            <div className="h-full">
+              <CIStatusPanel
+                stages={ciStages}
+                currentStage={currentCIStage}
+                onStageClick={(stage) => {
+                  console.log("CI Stage clicked:", stage);
+                  if (stage.output) {
+                    addTerminalLine(`\n🔧 ${stage.stage} Output:\n${stage.output}`);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Events Tab - Phase 4 */}
+          {rightTab === "EVENTS" && (
+            <div className="h-full">
+              <ExecutionEventFeed
+                events={streamEvents}
+                onEventClick={(event) => {
+                  console.log("Event clicked:", event);
+                  addTerminalLine(`📡 Event #${event.seq}: ${event.type}`);
+                }}
+              />
             </div>
           )}
         </div>

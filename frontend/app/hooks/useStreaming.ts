@@ -22,7 +22,22 @@ export type StreamEventType =
     | "BUILD_ERROR"
     | "TEST_START"
     | "TEST_RESULT"
-    | "PREVIEW_READY";
+    | "PREVIEW_READY"
+    // Phase 4: Multi-Agent Coordination Events
+    | "EXECUTION_STARTED"
+    | "EXECUTION_COMPLETED"
+    | "EXECUTION_FAILED"
+    | "TASK_STARTED"
+    | "TASK_COMPLETED"
+    | "TASK_FAILED"
+    | "TASK_RETRY"
+    | "AGENT_ASSIGNED"
+    | "BRANCH_MERGED"
+    | "MERGE_FAILED"
+    | "CI_STAGE_START"
+    | "CI_STAGE_COMPLETE"
+    | "CI_STAGE_FAILED"
+    | "DAG_UPDATE";
 
 export interface StreamEvent {
     type: StreamEventType;
@@ -206,4 +221,96 @@ export function isErrorEvent(event: StreamEvent): event is StreamEvent & {
     payload: { code: string; message: string; details?: string };
 } {
     return event.type === "ERROR" && event.payload !== undefined;
+}
+
+// Phase 4: Multi-Agent Event Type Guards
+export interface DAGTask {
+    id: string;
+    name: string;
+    description?: string;
+    type: string;
+    status: "PENDING" | "READY" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
+    dependencies: string[];
+    assigned_to?: string;
+    error?: string;
+    retry_count?: number;
+}
+
+export interface DAGState {
+    id: string;
+    project_id: string;
+    tasks: DAGTask[];
+    total: number;
+    completed: number;
+    failed: number;
+    running: number;
+    pending: number;
+}
+
+export interface ActiveAgent {
+    task_id: string;
+    agent_id: string;
+    agent_name: string;
+    task_name: string;
+    started_at: string;
+}
+
+export interface CIStageResult {
+    stage: "LINT" | "BUILD" | "TEST";
+    success: boolean;
+    output?: string;
+    error?: string;
+    duration_ms?: number;
+}
+
+export function isTaskStartedEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { task_id: string; task_name: string; agent_id?: string };
+} {
+    return event.type === "TASK_STARTED" && event.payload !== undefined;
+}
+
+export function isTaskCompletedEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { task_id: string; task_name: string; output?: Record<string, unknown> };
+} {
+    return event.type === "TASK_COMPLETED" && event.payload !== undefined;
+}
+
+export function isTaskFailedEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { task_id: string; task_name: string; error: string };
+} {
+    return event.type === "TASK_FAILED" && event.payload !== undefined;
+}
+
+export function isAgentAssignedEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { task_id: string; agent_id: string; agent_name: string };
+} {
+    return event.type === "AGENT_ASSIGNED" && event.payload !== undefined;
+}
+
+export function isDAGUpdateEvent(event: StreamEvent): event is StreamEvent & {
+    payload: DAGState;
+} {
+    return event.type === "DAG_UPDATE" && event.payload !== undefined;
+}
+
+export function isCIStageEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { task_id: string; stage: string; success?: boolean; output?: string; error?: string };
+} {
+    return (
+        (event.type === "CI_STAGE_START" ||
+            event.type === "CI_STAGE_COMPLETE" ||
+            event.type === "CI_STAGE_FAILED") &&
+        event.payload !== undefined
+    );
+}
+
+export function isExecutionEvent(event: StreamEvent): event is StreamEvent & {
+    payload: { message: string };
+} {
+    return (
+        (event.type === "EXECUTION_STARTED" ||
+            event.type === "EXECUTION_COMPLETED" ||
+            event.type === "EXECUTION_FAILED") &&
+        event.payload !== undefined
+    );
 }
