@@ -69,45 +69,84 @@ func ProjectLifecycle(ctx workflow.Context, input interface{}) (*ProjectState, e
 		state.ChatHistory += "\nPM: " + reply
 	}
 
-	// 2. Implementation Loop
+	// 2. Implementation Loop with Feedback
+	const maxCodeAttempts = 3
 	for {
 		state.Phase = "IMPLEMENTATION"
 
+		// === CODE GENERATION WITH SELF-CORRECTION LOOP ===
 		var codeBundle map[string]string
-		// Use "RefineCode" activity if we have existing code, or just "Generate"
-		// For now, let's reuse Generate but pass the specific feedback.
-		// Actually, standardizing on a "DevAgentGenerate" that takes context is fine.
-		// Detailed refinement might need a new activity, but let's stick to the plan:
-		// Plan says "Implement DevAgent.RefineCode activity".
-		// Let's use "DevAgentRefine" if state.CodeFiles is not empty, else "DevAgentGenerate".
+		var validationFeedback string
+		codeGenSuccess := false
 
-		var actName string
-		var input interface{}
+		for codeAttempt := 1; codeAttempt <= maxCodeAttempts && !codeGenSuccess; codeAttempt++ {
+			logger.Info("Code generation attempt", "Attempt", codeAttempt)
 
-		if len(state.CodeFiles) > 0 {
-			actName = "DevAgentRefine"
-			// We need a complex input for Refine: Code + Changes
-			// For simplicity in this step, let's serialize arguments or create a struct in activities.
-			// Let's pass a struct. But we are in workflows package.
-			// Let's pass a map for flexibility since we don't want strict coupling yet
-			input = map[string]interface{}{
-				"current_code": state.CodeFiles,
-				"chat_history": state.ChatHistory,
+			var actName string
+			var input interface{}
+
+			if len(state.CodeFiles) > 0 || validationFeedback != "" {
+				actName = "DevAgentRefine"
+				input = map[string]interface{}{
+					"current_code":        state.CodeFiles,
+					"chat_history":        state.ChatHistory,
+					"validation_feedback": validationFeedback,
+				}
+			} else {
+				actName = "DevAgentGenerate"
+				input = state.ChatHistory
 			}
-		} else {
-			actName = "DevAgentGenerate"
-			input = state.ChatHistory // or Spec. The original code used ChatHistory.
-		}
 
-		err = workflow.ExecuteActivity(ctx, actName, input).Get(ctx, &codeBundle)
-		if err != nil {
-			logger.Error("Dev Agent failed attempting retry...", "Error", err)
-			// In a real refined workflow, we might ask user to retry or fail.
-			// For now, let's break or return error.
-			return nil, err
-		}
+			err = workflow.ExecuteActivity(ctx, actName, input).Get(ctx, &codeBundle)
+			if err != nil {
+				logger.Error("Dev Agent failed", "Error", err, "Attempt", codeAttempt)
+				if codeAttempt == maxCodeAttempts {
+					return nil, err
+				}
+				continue
+			}
 
-		state.CodeFiles = codeBundle
+			state.CodeFiles = codeBundle
+
+			// === STAGE 1: VALIDATION (Syntax, Types, Lint) ===
+			logger.Info("Running Stage 1 validation", "Attempt", codeAttempt)
+			validationInput := map[string]interface{}{
+				"code_files": state.CodeFiles,
+			}
+
+			aoValidate := workflow.ActivityOptions{
+				StartToCloseTimeout: time.Minute * 2,
+			}
+			ctxValidate := workflow.WithActivityOptions(ctx, aoValidate)
+
+			var validationResult map[string]interface{}
+			if err := workflow.ExecuteActivity(ctxValidate, "ValidateCode", validationInput).Get(ctx, &validationResult); err != nil {
+				logger.Warn("Validation activity failed", "Error", err)
+				// Skip validation on error, proceed to tests
+				codeGenSuccess = true
+				break
+			}
+
+			// Check validation result
+			if success, ok := validationResult["success"].(bool); ok && success {
+				logger.Info("Stage 1 validation passed!")
+				codeGenSuccess = true
+			} else {
+				// Validation failed - extract feedback for self-correction
+				if feedback, ok := validationResult["feedback"].(string); ok {
+					validationFeedback = feedback
+				}
+				if summary, ok := validationResult["summary"].(string); ok {
+					logger.Warn("Validation failed", "Summary", summary, "Attempt", codeAttempt)
+				}
+
+				// If not last attempt, loop will regenerate with feedback
+				if codeAttempt == maxCodeAttempts {
+					logger.Warn("Validation failed after max attempts - proceeding to tests")
+					codeGenSuccess = true // Let tests catch remaining issues
+				}
+			}
+		}
 
 		// Trigger QA Agent with Three-Strike Rule Feedback Loop
 		var testBundle map[string]string
@@ -211,6 +250,38 @@ func ProjectLifecycle(ctx workflow.Context, input interface{}) (*ProjectState, e
 
 			if !testsPassed {
 				logger.Warn("Tests failed after 3 attempts - continuing to review phase for human intervention")
+			}
+		}
+
+		// === STAGE 4: CODE CRITIC REVIEW ===
+		logger.Info("Running Code Critic review")
+		criticInput := map[string]interface{}{
+			"code_files": state.CodeFiles,
+			"spec":       specToUse,
+		}
+
+		aoCritic := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Minute * 2,
+		}
+		ctxCritic := workflow.WithActivityOptions(ctx, aoCritic)
+
+		var criticResult map[string]interface{}
+		if err := workflow.ExecuteActivity(ctxCritic, "CodeCriticReview", criticInput).Get(ctx, &criticResult); err != nil {
+			logger.Warn("Code Critic failed", "Error", err)
+		} else {
+			// Log critic results
+			if approved, ok := criticResult["approved"].(bool); ok {
+				if approved {
+					logger.Info("Code Critic approved the code")
+				} else {
+					logger.Warn("Code Critic found issues")
+					if summary, ok := criticResult["summary"].(string); ok {
+						logger.Info("Critic summary", "Summary", summary)
+					}
+				}
+			}
+			if score, ok := criticResult["overall_score"].(float64); ok {
+				logger.Info("Code quality score", "Score", int(score))
 			}
 		}
 

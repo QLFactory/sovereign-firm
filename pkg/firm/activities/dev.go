@@ -199,8 +199,9 @@ export default defineConfig({
 			"test":  "vitest run",
 		},
 		"dependencies": map[string]string{
-			"react":     "^18.2.0",
-			"react-dom": "^18.2.0",
+			"react":            "^18.2.0",
+			"react-dom":        "^18.2.0",
+			"react-router-dom": "^6.22.0",
 		},
 		"devDependencies": map[string]string{
 			"vite":                   "^5.0.0",
@@ -219,8 +220,9 @@ export default defineConfig({
 
 // RefineInput struct to deserialized the map interface{}
 type RefineInput struct {
-	CurrentCode map[string]string `json:"current_code"`
-	ChatHistory string            `json:"chat_history"`
+	CurrentCode        map[string]string `json:"current_code"`
+	ChatHistory        string            `json:"chat_history"`
+	ValidationFeedback string            `json:"validation_feedback,omitempty"`
 }
 
 // RefineCode modifies existing code based on feedback
@@ -232,9 +234,10 @@ func (a *DevAgent) RefineCode(ctx context.Context, input map[string]interface{})
 	json.Unmarshal(inputBytes, &req)
 
 	sysPrompt := `You are a Senior React Developer being asked to modify an existing application.
-Output ONLY valid JSON of the *modified* files. 
+Output ONLY valid JSON of the *modified* files.
 You can return a partial list of files - only those that changed.
 Keys are filenames, values are new content.
+IMPORTANT: Fix any validation errors first before implementing new features.
 `
 	// Compress code for context (in a real app we'd be smarter due to context window)
 	// For now, dump it all in.
@@ -243,7 +246,13 @@ Keys are filenames, values are new content.
 		codeContext += fmt.Sprintf("File: %s\n```\n%s\n```\n", name, content)
 	}
 
-	prompt := fmt.Sprintf("%s\n\nFEEDBACK/INSTRUCTIONS:\n%s\n\nGenerate the JSON of modified files now.", codeContext, req.ChatHistory)
+	var prompt string
+	if req.ValidationFeedback != "" {
+		// Self-correction mode: focus on fixing validation errors
+		prompt = fmt.Sprintf("%s\n\nVALIDATION ERRORS TO FIX:\n%s\n\nFix these validation errors and generate the JSON of corrected files.", codeContext, req.ValidationFeedback)
+	} else {
+		prompt = fmt.Sprintf("%s\n\nFEEDBACK/INSTRUCTIONS:\n%s\n\nGenerate the JSON of modified files now.", codeContext, req.ChatHistory)
+	}
 
 	// RAG (Refinement patterns?) - skipped for now to save context, or we could look up "how to change colors".
 

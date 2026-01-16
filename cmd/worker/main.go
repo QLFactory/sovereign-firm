@@ -67,6 +67,12 @@ func main() {
 	testRunner := activities.NewTestRunner()
 	w.RegisterActivityWithOptions(testRunner.RunTests, activity.RegisterOptions{Name: "RunTests"})
 
+	validator := activities.NewValidator()
+	w.RegisterActivityWithOptions(validator.ValidateCode, activity.RegisterOptions{Name: "ValidateCode"})
+
+	critic := activities.NewCodeCritic()
+	w.RegisterActivityWithOptions(critic.ReviewCode, activity.RegisterOptions{Name: "CodeCriticReview"})
+
 	log.Println("Worker started...")
 	err = w.Run(worker.InterruptCh())
 	if err != nil {
