@@ -9,10 +9,24 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/qlfactory/sovereign-firm/pkg/sovereign/memory"
 )
+
+// ToolConfig holds optional configuration for builtin tools
+type ToolConfig struct {
+	RAGPipeline *memory.RAGPipeline
+	ProjectID   string
+	ClientID    string
+}
 
 // RegisterBuiltinTools registers all built-in tools
 func RegisterBuiltinTools(registry *ToolRegistry, workDir string) {
+	RegisterBuiltinToolsWithConfig(registry, workDir, nil)
+}
+
+// RegisterBuiltinToolsWithConfig registers all built-in tools with optional RAG configuration
+func RegisterBuiltinToolsWithConfig(registry *ToolRegistry, workDir string, config *ToolConfig) {
 	// File operations
 	registry.Register(fileReadDef(), fileReadHandler(workDir))
 	registry.Register(fileWriteDef(), fileWriteHandler(workDir))
@@ -28,7 +42,7 @@ func RegisterBuiltinTools(registry *ToolRegistry, workDir string) {
 	registry.Register(gitDiffDef(), gitDiffHandler(workDir))
 
 	// Search and analysis
-	registry.Register(semanticSearchDef(), semanticSearchHandler())
+	registry.Register(semanticSearchDef(), semanticSearchHandler(config))
 	registry.Register(grepSearchDef(), grepSearchHandler(workDir))
 }
 
@@ -381,23 +395,79 @@ func semanticSearchDef() *ToolDefinition {
 	}
 }
 
-func semanticSearchHandler() ToolHandler {
+func semanticSearchHandler(config *ToolConfig) ToolHandler {
 	return func(ctx context.Context, req *ToolRequest) *ToolResponse {
 		query, _ := req.Params["query"].(string)
-		_ = query
+		if query == "" {
+			return &ToolResponse{
+				ID:      req.ID,
+				Success: false,
+				Error:   &ToolError{Code: 400, Message: "query is required"},
+			}
+		}
 
-		// TODO: Integrate with memory store (ChromaDB)
-		// For now, return placeholder
+		topK := 5
+		if k, ok := req.Params["top_k"].(float64); ok {
+			topK = int(k)
+		}
+
+		// Check if RAG pipeline is configured
+		if config == nil || config.RAGPipeline == nil {
+			return &ToolResponse{
+				ID:      req.ID,
+				Success: true,
+				Result: []map[string]interface{}{
+					{
+						"content":  "// Semantic search not configured - RAG pipeline not initialized",
+						"score":    0.0,
+						"metadata": map[string]string{"note": "Initialize RAG pipeline to enable semantic search"},
+					},
+				},
+			}
+		}
+
+		// Use RAG pipeline to retrieve relevant context
+		retrieval, err := config.RAGPipeline.Retrieve(ctx, query, config.ProjectID, config.ClientID)
+		if err != nil {
+			return &ToolResponse{
+				ID:      req.ID,
+				Success: false,
+				Error:   &ToolError{Code: 500, Message: fmt.Sprintf("semantic search failed: %v", err)},
+			}
+		}
+
+		// Convert results to response format
+		results := make([]map[string]interface{}, 0, len(retrieval.Documents))
+		for i, doc := range retrieval.Documents {
+			if i >= topK {
+				break
+			}
+			result := map[string]interface{}{
+				"content":   doc.Content,
+				"score":     doc.Score,
+				"file_path": doc.FilePath,
+				"language":  doc.Language,
+				"type":      string(doc.Type),
+			}
+			if doc.StartLine > 0 {
+				result["start_line"] = doc.StartLine
+				result["end_line"] = doc.EndLine
+			}
+			results = append(results, result)
+		}
+
+		// Add search metadata to results
+		searchResult := map[string]interface{}{
+			"documents":      results,
+			"query":          query,
+			"token_estimate": retrieval.TokenEstimate,
+			"total_results":  len(retrieval.Documents),
+		}
+
 		return &ToolResponse{
 			ID:      req.ID,
 			Success: true,
-			Result: []map[string]interface{}{
-				{
-					"content":  "// Semantic search not yet connected to memory store",
-					"score":    0.0,
-					"metadata": map[string]string{"note": "implement ChromaDB integration"},
-				},
-			},
+			Result:  searchResult,
 		}
 	}
 }
