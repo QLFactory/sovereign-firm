@@ -253,7 +253,7 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		state.Requirements = state.ChatHistory // Keep as string for reference
 	}
 
-	transitionPhase(state, PhaseSizing)
+	transitionPhaseWithDB(ctx, state, PhaseSizing)
 
 	// ============================================================
 	// PHASE 2: SIZING (Complexity & Effort Estimation)
@@ -287,7 +287,7 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		logger.Warn("Effort estimation failed", "Error", err)
 	}
 
-	transitionPhase(state, PhasePlanning)
+	transitionPhaseWithDB(ctx, state, PhasePlanning)
 
 	// ============================================================
 	// PHASE 3: PLANNING (Project Plan & Proposal)
@@ -325,7 +325,7 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		logger.Warn("Proposal generation failed", "Error", err)
 	}
 
-	transitionPhase(state, PhaseArchitecture)
+	transitionPhaseWithDB(ctx, state, PhaseArchitecture)
 
 	// ============================================================
 	// PHASE 4: ARCHITECTURE (System Design)
@@ -393,7 +393,7 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		}
 	}
 
-	transitionPhase(state, PhaseDevelopment)
+	transitionPhaseWithDB(ctx, state, PhaseDevelopment)
 
 	// ============================================================
 	// PHASE 5: DEVELOPMENT (Code Generation)
@@ -554,7 +554,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 		}
 	}
 
-	transitionPhase(state, PhaseTesting)
+	transitionPhaseWithDB(ctx, state, PhaseTesting)
 
 	// ============================================================
 	// PHASE 6: TESTING (Full Test Pyramid)
@@ -702,7 +702,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 	// PHASE 7: DEPLOYMENT (DevOps Artifacts)
 	// ============================================================
 	if config.EnableDeployment {
-		transitionPhase(state, PhaseDeployment)
+		transitionPhaseWithDB(ctx, state, PhaseDeployment)
 		logger.Info("Starting DEPLOYMENT phase")
 
 		// Generate Dockerfile
@@ -832,7 +832,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 	// PHASE 8: OPERATIONS (SRE Artifacts)
 	// ============================================================
 	if config.EnableSRE {
-		transitionPhase(state, PhaseOperations)
+		transitionPhaseWithDB(ctx, state, PhaseOperations)
 		logger.Info("Starting OPERATIONS phase")
 
 		// Generate monitoring config
@@ -885,13 +885,13 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 		}
 	}
 
-	transitionPhase(state, PhaseHandoff)
+	transitionPhaseWithDB(ctx, state, PhaseHandoff)
 
 	// ============================================================
 	// PHASE 9: HANDOFF (Review & Deliver)
 	// ============================================================
 	logger.Info("Starting HANDOFF phase")
-	state.Phase = PhaseReview
+	transitionPhaseWithDB(ctx, state, PhaseReview)
 
 	// Wait for final approval
 	for {
@@ -903,7 +903,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 		}
 
 		if signal.Message == "/reject" {
-			state.Phase = PhaseFailed
+			transitionPhaseWithDB(ctx, state, PhaseFailed)
 			state.Errors = append(state.Errors, "Project rejected by user")
 			return state, nil
 		}
@@ -916,8 +916,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 	// Mark complete
 	now := workflow.Now(ctx)
 	state.CompletedAt = &now
-	state.Phase = PhaseComplete
-	state.PhaseHistory = append(state.PhaseHistory, string(PhaseComplete))
+	transitionPhaseWithDB(ctx, state, PhaseComplete)
 
 	logger.Info("Consultancy workflow completed successfully")
 	return state, nil
@@ -929,6 +928,27 @@ func transitionPhase(state *ConsultancyState, phase ConsultancyPhase) {
 	state.Phase = phase
 	state.PhaseHistory = append(state.PhaseHistory, string(phase))
 	state.UpdatedAt = time.Now()
+}
+
+// transitionPhaseWithDB transitions the phase and updates the database
+func transitionPhaseWithDB(ctx workflow.Context, state *ConsultancyState, phase ConsultancyPhase) {
+	transitionPhase(state, phase)
+
+	// Update database - wait for activity to complete (quick operation)
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Second * 10,
+	}
+	actCtx := workflow.WithActivityOptions(ctx, ao)
+
+	// Execute and wait for result (database update is fast)
+	err := workflow.ExecuteActivity(actCtx, "ProjectUpdatePhase", map[string]string{
+		"workflow_id": state.ProjectID,
+		"phase":       string(phase),
+	}).Get(ctx, nil)
+	if err != nil {
+		// Log but don't fail the workflow for DB update issues
+		workflow.GetLogger(ctx).Warn("Failed to update project phase in database", "error", err)
+	}
 }
 
 func getString(m map[string]interface{}, key, defaultVal string) string {

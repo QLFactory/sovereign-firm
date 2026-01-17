@@ -669,6 +669,20 @@ func (q *Queries) UpdateProjectPhase(ctx context.Context, arg UpdateProjectPhase
 	return err
 }
 
+const updateProjectPhaseByWorkflowID = `-- name: UpdateProjectPhaseByWorkflowID :exec
+UPDATE projects SET phase = $2, updated_at = NOW() WHERE workflow_id = $1
+`
+
+type UpdateProjectPhaseByWorkflowIDParams struct {
+	WorkflowID string  `json:"workflow_id"`
+	Phase      *string `json:"phase"`
+}
+
+func (q *Queries) UpdateProjectPhaseByWorkflowID(ctx context.Context, arg UpdateProjectPhaseByWorkflowIDParams) error {
+	_, err := q.db.Exec(ctx, updateProjectPhaseByWorkflowID, arg.WorkflowID, arg.Phase)
+	return err
+}
+
 const updateProjectStatus = `-- name: UpdateProjectStatus :exec
 UPDATE projects SET status = $2 WHERE id = $1
 `

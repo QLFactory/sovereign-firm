@@ -66,6 +66,9 @@ SELECT COUNT(*) FROM projects WHERE tenant_id = $1 AND status != 'archived';
 -- name: UpdateProjectPhase :exec
 UPDATE projects SET phase = $2 WHERE id = $1;
 
+-- name: UpdateProjectPhaseByWorkflowID :exec
+UPDATE projects SET phase = $2, updated_at = NOW() WHERE workflow_id = $1;
+
 -- name: UpdateProjectStatus :exec
 UPDATE projects SET status = $2 WHERE id = $1;
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -30,6 +31,27 @@ func main() {
 		log.Fatalf("CRITICAL: Cannot connect to LLM: %v", err)
 	}
 	log.Println("✅ Connected to LLM")
+
+	// Initialize database connection (optional - worker still works without it)
+	var dbPool *pgxpool.Pool
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://sovereign:sovereign123@localhost:5432/sovereign_firm?sslmode=disable"
+	}
+	dbPool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		log.Printf("Warning: Database not available: %v (phase updates will be skipped)", err)
+		dbPool = nil
+	} else {
+		if err := dbPool.Ping(ctx); err != nil {
+			log.Printf("Warning: Database ping failed: %v (phase updates will be skipped)", err)
+			dbPool.Close()
+			dbPool = nil
+		} else {
+			log.Println("✅ Connected to Database")
+			defer dbPool.Close()
+		}
+	}
 
 	temporalHost := os.Getenv("TEMPORAL_HOST")
 	if temporalHost == "" {
@@ -158,6 +180,10 @@ func main() {
 	w.RegisterActivityWithOptions(skillInjector.ListSkills, activity.RegisterOptions{Name: "SkillListSkills"})
 	w.RegisterActivityWithOptions(skillInjector.GetSkillDependencies, activity.RegisterOptions{Name: "SkillGetDependencies"})
 	w.RegisterActivityWithOptions(skillInjector.RegisterSkill, activity.RegisterOptions{Name: "SkillRegister"})
+
+	// Project Agent - Database Operations for Project Tracking
+	projectAgent := activities.NewProjectAgent(dbPool)
+	w.RegisterActivityWithOptions(projectAgent.UpdatePhase, activity.RegisterOptions{Name: "ProjectUpdatePhase"})
 
 	log.Println("Worker started...")
 	err = w.Run(worker.InterruptCh())
