@@ -189,8 +189,11 @@ function Navigation() {
           <a href="#features" className="nav-link">Features</a>
           <a href="#how-it-works" className="nav-link">How It Works</a>
           <a href="#pricing" className="nav-link">Pricing</a>
-          <Link href="/dashboard" className="btn btn-primary">
-            Launch Console
+          <Link href="/login" className="nav-link">
+            Sign In
+          </Link>
+          <Link href="/register" className="btn btn-primary">
+            Get Started
           </Link>
         </div>
       </div>

@@ -9,18 +9,22 @@ interface StoreProviderProps {
 
 /**
  * StoreProvider initializes the store on mount.
- * It loads projects from localStorage and sets up any initial state.
+ * It checks authentication and loads projects from localStorage.
  */
 export function StoreProvider({ children }: StoreProviderProps) {
   const initialized = useRef(false);
   const loadProjects = useAppStore((state) => state.loadProjects);
+  const checkAuth = useAppStore((state) => state.checkAuth);
 
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
-      loadProjects();
+      // Check authentication first, then load projects
+      checkAuth().then(() => {
+        loadProjects();
+      });
     }
-  }, [loadProjects]);
+  }, [loadProjects, checkAuth]);
 
   return <>{children}</>;
 }

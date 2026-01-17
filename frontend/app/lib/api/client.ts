@@ -11,24 +11,98 @@ import type {
   ApiError,
   Project,
   ProjectConfig,
+  User,
+  LoginRequest,
+  RegisterRequest,
+  AuthResponse,
+  RefreshResponse,
 } from "./types";
 
 const API_BASE = "/api";
+const AUTH_TOKEN_KEY = "sovereign-firm-access-token";
+const REFRESH_TOKEN_KEY = "sovereign-firm-refresh-token";
 
 class ApiClient {
+  private accessToken: string | null = null;
+  private refreshToken: string | null = null;
+
+  constructor() {
+    // Load tokens from localStorage on init
+    if (typeof window !== "undefined") {
+      this.accessToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    }
+  }
+
+  // Token management
+  setTokens(accessToken: string, refreshToken: string): void {
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+    if (typeof window !== "undefined") {
+      localStorage.setItem(AUTH_TOKEN_KEY, accessToken);
+      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    }
+  }
+
+  clearTokens(): void {
+    this.accessToken = null;
+    this.refreshToken = null;
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
+  }
+
+  getAccessToken(): string | null {
+    return this.accessToken;
+  }
+
+  isAuthenticated(): boolean {
+    return !!this.accessToken;
+  }
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    includeAuth: boolean = true
   ): Promise<T> {
     const url = `${API_BASE}${endpoint}`;
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string>),
+    };
+
+    // Add auth header if we have a token and auth is needed
+    if (includeAuth && this.accessToken) {
+      headers["Authorization"] = `Bearer ${this.accessToken}`;
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers,
     });
+
+    // Handle 401 - try to refresh token
+    if (response.status === 401 && this.refreshToken && includeAuth) {
+      const refreshed = await this.tryRefreshToken();
+      if (refreshed) {
+        // Retry the request with new token
+        headers["Authorization"] = `Bearer ${this.accessToken}`;
+        const retryResponse = await fetch(url, { ...options, headers });
+        if (!retryResponse.ok) {
+          const error: ApiError = await retryResponse.json().catch(() => ({
+            error: `Request failed with status ${retryResponse.status}`,
+          }));
+          throw new Error(error.error || "Request failed");
+        }
+        return retryResponse.json();
+      } else {
+        // Refresh failed, clear tokens
+        this.clearTokens();
+        throw new Error("Session expired. Please log in again.");
+      }
+    }
 
     if (!response.ok) {
       const error: ApiError = await response.json().catch(() => ({
@@ -38,6 +112,91 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  private async tryRefreshToken(): Promise<boolean> {
+    if (!this.refreshToken) return false;
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: this.refreshToken }),
+      });
+
+      if (!response.ok) return false;
+
+      const data: RefreshResponse = await response.json();
+      this.setTokens(data.access_token, data.refresh_token);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ==========================================================================
+  // Authentication
+  // ==========================================================================
+
+  /**
+   * Register a new user and tenant
+   */
+  async register(data: RegisterRequest): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>(
+      "/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      false
+    );
+    this.setTokens(response.access_token, response.refresh_token);
+    return response;
+  }
+
+  /**
+   * Login with email and password
+   */
+  async login(data: LoginRequest): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      false
+    );
+    this.setTokens(response.access_token, response.refresh_token);
+    return response;
+  }
+
+  /**
+   * Logout - clear tokens and invalidate refresh token
+   */
+  async logout(): Promise<void> {
+    try {
+      if (this.refreshToken) {
+        await this.request(
+          "/auth/logout",
+          {
+            method: "POST",
+            body: JSON.stringify({ refresh_token: this.refreshToken }),
+          },
+          true
+        );
+      }
+    } catch {
+      // Ignore errors, we're logging out anyway
+    } finally {
+      this.clearTokens();
+    }
+  }
+
+  /**
+   * Get current user info
+   */
+  async getCurrentUser(): Promise<User> {
+    return this.request<User>("/auth/me");
   }
 
   // ==========================================================================

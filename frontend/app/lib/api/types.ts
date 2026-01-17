@@ -371,6 +371,49 @@ export interface ApiError {
 }
 
 // =============================================================================
+// Authentication Types
+// =============================================================================
+
+export interface User {
+  id: string;
+  email: string;
+  tenant_id: string;
+  tenant_name: string;
+  role: string;
+  created_at: string;
+}
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  tenant_name: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+// =============================================================================
 // Stream Event Types (re-exported from useStreaming for convenience)
 // =============================================================================
 

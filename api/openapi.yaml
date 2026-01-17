@@ -1,0 +1,650 @@
+openapi: 3.1.0
+info:
+  title: Sovereign Firm API
+  description: AI-powered software consultancy platform API
+  version: 1.0.0
+  contact:
+    name: Sovereign Firm
+    url: https://sovereignfirm.dev
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Projects
+    description: Project management
+  - name: Artifacts
+    description: Project artifacts and files
+  - name: Health
+    description: Health checks
+
+paths:
+  # Authentication
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Register a new user and tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email or tenant slug already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginUser
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutUser
+      summary: Logout and invalidate refresh token
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Get current user info
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # Projects
+  /api/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List all projects for the current tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, paused, completed, failed]
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a new project (starts Temporal workflow)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/projects/{projectId}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: Get project details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Projects]
+      operationId: archiveProject
+      summary: Archive a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '204':
+          description: Project archived
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/projects/{projectId}/state:
+    get:
+      tags: [Projects]
+      operationId: getProjectState
+      summary: Get full project state from Temporal workflow
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Full consultancy state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultancyState'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/projects/{projectId}/message:
+    post:
+      tags: [Projects]
+      operationId: sendMessage
+      summary: Send a message to the project workflow
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequest'
+      responses:
+        '200':
+          description: Message sent
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/projects/{projectId}/stream:
+    get:
+      tags: [Projects]
+      operationId: streamProject
+      summary: WebSocket stream for real-time project updates
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '101':
+          description: Switching to WebSocket protocol
+
+  # Artifacts
+  /api/projects/{projectId}/artifacts:
+    get:
+      tags: [Artifacts]
+      operationId: listArtifacts
+      summary: List project artifacts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [source, doc, build, snapshot, other]
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Artifact'
+
+  /api/projects/{projectId}/artifacts/{artifactId}:
+    get:
+      tags: [Artifacts]
+      operationId: getArtifact
+      summary: Download an artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: Redirect to presigned URL
+
+  # Health
+  /health:
+    get:
+      tags: [Health]
+      operationId: healthCheck
+      summary: Basic health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: readinessCheck
+      summary: Readiness check (DB, Redis, MinIO, Temporal)
+      responses:
+        '200':
+          description: All dependencies ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+        '503':
+          description: One or more dependencies not ready
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+
+    # Auth schemas
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - tenant_name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+        tenant_name:
+          type: string
+        tenant_slug:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        token_type:
+          type: string
+          default: Bearer
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member, viewer]
+        tenant_id:
+          type: string
+          format: uuid
+
+    # Project schemas
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        initial_message:
+          type: string
+        enable_full_stack:
+          type: boolean
+          default: true
+        enable_deployment:
+          type: boolean
+          default: false
+        enable_sre:
+          type: boolean
+          default: false
+        preferred_frontend:
+          type: string
+        preferred_backend:
+          type: string
+        preferred_database:
+          type: string
+        preferred_cloud:
+          type: string
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        phase:
+          $ref: '#/components/schemas/Phase'
+        status:
+          type: string
+          enum: [active, paused, completed, failed, archived]
+        config:
+          type: object
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectList:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Phase:
+      type: string
+      enum:
+        - INTAKE
+        - PLANNING
+        - ARCHITECTURE
+        - DATABASE
+        - BACKEND
+        - FRONTEND
+        - INTEGRATION
+        - TESTING
+        - DEPLOYMENT
+        - HANDOFF
+        - COMPLETED
+        - FAILED
+
+    MessageRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
+    ConsultancyState:
+      type: object
+      description: Full workflow state from Temporal
+      properties:
+        phase:
+          $ref: '#/components/schemas/Phase'
+        project_name:
+          type: string
+        chat_history:
+          type: array
+          items:
+            type: object
+        files:
+          type: object
+          additionalProperties:
+            type: string
+        architecture:
+          type: object
+        database_schema:
+          type: string
+        api_spec:
+          type: string
+        test_results:
+          type: object
+        errors:
+          type: array
+          items:
+            type: string
+
+    # Artifact schemas
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [source, doc, build, snapshot, other]
+        name:
+          type: string
+        path:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+        checksum:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # Health schemas
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        version:
+          type: string
+
+    ReadinessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          properties:
+            database:
+              type: boolean
+            redis:
+              type: boolean
+            minio:
+              type: boolean
+            temporal:
+              type: boolean

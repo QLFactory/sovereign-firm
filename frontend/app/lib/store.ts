@@ -17,6 +17,9 @@ import type {
   CIStageResult,
   LeftPanelTab,
   RightPanelTab,
+  User,
+  LoginRequest,
+  RegisterRequest,
 } from "./api/types";
 import { api, loadProjectsFromStorage, saveProjectsToStorage, createProjectFromConfig } from "./api/client";
 
@@ -25,6 +28,12 @@ import { api, loadProjectsFromStorage, saveProjectsToStorage, createProjectFromC
 // =============================================================================
 
 interface AppState {
+  // Authentication
+  user: User | null;
+  isAuthenticated: boolean;
+  isAuthLoading: boolean;
+  authError: string | null;
+
   // Projects
   projects: Project[];
   currentProject: Project | null;
@@ -59,6 +68,13 @@ interface AppState {
 }
 
 interface AppActions {
+  // Auth actions
+  login: (data: LoginRequest) => Promise<boolean>;
+  register: (data: RegisterRequest) => Promise<boolean>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
+  clearAuthError: () => void;
+
   // Project actions
   loadProjects: () => void;
   createProject: (config: ProjectConfig) => Promise<string | null>;
@@ -114,6 +130,12 @@ type AppStore = AppState & AppActions;
 // =============================================================================
 
 const initialState: AppState = {
+  // Authentication
+  user: null,
+  isAuthenticated: false,
+  isAuthLoading: true, // Start true to check auth on load
+  authError: null,
+
   // Projects
   projects: [],
   currentProject: null,
@@ -155,6 +177,107 @@ export const useAppStore = create<AppStore>()(
   persist(
     immer((set, get) => ({
       ...initialState,
+
+      // =========================================================================
+      // Auth Actions
+      // =========================================================================
+
+      login: async (data: LoginRequest) => {
+        set((state) => {
+          state.isAuthLoading = true;
+          state.authError = null;
+        });
+
+        try {
+          const response = await api.login(data);
+          set((state) => {
+            state.user = response.user;
+            state.isAuthenticated = true;
+            state.isAuthLoading = false;
+            state.authError = null;
+          });
+          return true;
+        } catch (error) {
+          set((state) => {
+            state.isAuthLoading = false;
+            state.authError = error instanceof Error ? error.message : "Login failed";
+          });
+          return false;
+        }
+      },
+
+      register: async (data: RegisterRequest) => {
+        set((state) => {
+          state.isAuthLoading = true;
+          state.authError = null;
+        });
+
+        try {
+          const response = await api.register(data);
+          set((state) => {
+            state.user = response.user;
+            state.isAuthenticated = true;
+            state.isAuthLoading = false;
+            state.authError = null;
+          });
+          return true;
+        } catch (error) {
+          set((state) => {
+            state.isAuthLoading = false;
+            state.authError = error instanceof Error ? error.message : "Registration failed";
+          });
+          return false;
+        }
+      },
+
+      logout: async () => {
+        try {
+          await api.logout();
+        } finally {
+          set((state) => {
+            state.user = null;
+            state.isAuthenticated = false;
+            state.projects = [];
+            state.currentProject = null;
+            state.currentState = null;
+          });
+        }
+      },
+
+      checkAuth: async () => {
+        // Check if we have a token
+        if (!api.isAuthenticated()) {
+          set((state) => {
+            state.isAuthLoading = false;
+            state.isAuthenticated = false;
+            state.user = null;
+          });
+          return;
+        }
+
+        try {
+          const user = await api.getCurrentUser();
+          set((state) => {
+            state.user = user;
+            state.isAuthenticated = true;
+            state.isAuthLoading = false;
+          });
+        } catch {
+          // Token invalid or expired
+          api.clearTokens();
+          set((state) => {
+            state.user = null;
+            state.isAuthenticated = false;
+            state.isAuthLoading = false;
+          });
+        }
+      },
+
+      clearAuthError: () => {
+        set((state) => {
+          state.authError = null;
+        });
+      },
 
       // =========================================================================
       // Project Actions
@@ -492,6 +615,13 @@ export const useAppStore = create<AppStore>()(
 // Selectors
 // =============================================================================
 
+// Auth selectors
+export const selectUser = (state: AppStore) => state.user;
+export const selectIsAuthenticated = (state: AppStore) => state.isAuthenticated;
+export const selectIsAuthLoading = (state: AppStore) => state.isAuthLoading;
+export const selectAuthError = (state: AppStore) => state.authError;
+
+// Project selectors
 export const selectProjects = (state: AppStore) => state.projects;
 export const selectCurrentProject = (state: AppStore) => state.currentProject;
 export const selectCurrentState = (state: AppStore) => state.currentState;

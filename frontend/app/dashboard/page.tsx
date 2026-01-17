@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAppStore } from "../lib/store";
 import { PHASE_COLORS, getPhaseProgress } from "../lib/api/types";
-import type { Project, ProjectConfig } from "../lib/api/types";
+import type { Project, ProjectConfig, User } from "../lib/api/types";
 
 // Dynamically import heavy components
 const PodConsole = dynamic(() => import("../components/PodConsole"), {
@@ -34,6 +34,8 @@ function Sidebar({
   selectedProject,
   onSelectProject,
   onNewProject,
+  user,
+  onLogout,
 }: {
   activeView: string;
   setActiveView: (view: string) => void;
@@ -41,6 +43,8 @@ function Sidebar({
   selectedProject: Project | null;
   onSelectProject: (project: Project) => void;
   onNewProject: () => void;
+  user: User | null;
+  onLogout: () => void;
 }) {
   return (
     <aside className="w-64 h-screen bg-[var(--carbon)] border-r border-[var(--steel)] flex flex-col">
@@ -166,13 +170,35 @@ function Sidebar({
       {/* User section */}
       <div className="p-4 border-t border-[var(--steel)]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--violet-glow)] to-[var(--cyan-glow)] flex items-center justify-center text-xs font-bold">
-            U
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--violet-glow)] to-[var(--cyan-glow)] flex items-center justify-center text-xs font-bold text-white">
+            {user?.email?.charAt(0).toUpperCase() || "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-[var(--ivory)] truncate">User</div>
-            <div className="text-xs text-[var(--silver)]">Pro Plan</div>
+            <div className="text-sm font-medium text-[var(--ivory)] truncate">
+              {user?.email || "User"}
+            </div>
+            <div className="text-xs text-[var(--silver)]">
+              {user?.tenant_name || "Pro Plan"}
+            </div>
           </div>
+          <button
+            onClick={onLogout}
+            className="w-8 h-8 rounded-lg bg-[var(--graphite)] flex items-center justify-center text-[var(--silver)] hover:text-[var(--rose-glow)] hover:bg-[var(--slate)] transition-colors"
+            title="Sign out"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -647,12 +673,31 @@ export default function Dashboard() {
   const [activeView, setActiveView] = useState("projects");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Auth state
+  const user = useAppStore((state) => state.user);
+  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+  const isAuthLoading = useAppStore((state) => state.isAuthLoading);
+  const logout = useAppStore((state) => state.logout);
+
   // Store state and actions
   const projects = useAppStore((state) => state.projects);
   const currentProject = useAppStore((state) => state.currentProject);
   const isCreating = useAppStore((state) => state.isCreating);
   const selectProject = useAppStore((state) => state.selectProject);
   const createProject = useAppStore((state) => state.createProject);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  // Handle logout
+  const handleLogout = useCallback(async () => {
+    await logout();
+    router.push("/login");
+  }, [logout, router]);
 
   // Create new project
   const handleCreateProject = useCallback(
@@ -675,6 +720,20 @@ export default function Dashboard() {
     [selectProject]
   );
 
+  // Show loading while checking auth
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--obsidian)] flex items-center justify-center">
+        <div className="spinner" />
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="flex h-screen bg-[var(--obsidian)]">
       <Sidebar
@@ -684,6 +743,8 @@ export default function Dashboard() {
         selectedProject={currentProject}
         onSelectProject={handleSelectProject}
         onNewProject={() => setShowCreateModal(true)}
+        user={user}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 overflow-hidden">

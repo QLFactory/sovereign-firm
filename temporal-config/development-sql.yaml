@@ -1,0 +1,7 @@
+# Temporal dynamic config for development
+history.defaultActivityRetryPolicy:
+  - value:
+      InitialIntervalInSeconds: 1
+      MaximumIntervalCoefficient: 10.0
+      BackoffCoefficient: 2.0
+      MaximumAttempts: 50
