@@ -51,21 +51,23 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
 
       {/* Stack badges */}
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
-          {project.config.preferred_frontend}
-        </span>
-        <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
-          {project.config.preferred_backend}
-        </span>
-        <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
-          {project.config.preferred_database}
-        </span>
-      </div>
+      {project.config && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
+            {project.config.preferred_frontend}
+          </span>
+          <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
+            {project.config.preferred_backend}
+          </span>
+          <span className="px-2 py-1 bg-[var(--graphite)] rounded text-[var(--silver)]">
+            {project.config.preferred_database}
+          </span>
+        </div>
+      )}
 
       {/* Meta */}
       <div className="mt-4 pt-4 border-t border-[var(--steel)] flex items-center justify-between text-xs text-[var(--silver)]">
-        <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+        <span>Created {new Date(project.createdAt || project.created_at || Date.now()).toLocaleDateString()}</span>
         <span className="flex items-center gap-1">
           <span
             className={`w-2 h-2 rounded-full ${

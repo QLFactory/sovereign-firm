@@ -327,11 +327,14 @@ export function categorizeArtifacts(state: ConsultancyState): ArtifactCategory[]
 
 export interface Project {
   id: string;
+  workflow_id?: string;
   name: string;
+  description?: string;
   phase: Phase;
-  status: "running" | "complete" | "failed" | "pending";
-  createdAt: string;
-  config: ProjectConfig;
+  status: "running" | "complete" | "failed" | "pending" | "active" | string;
+  created_at?: string;
+  createdAt?: string;  // Legacy support
+  config?: ProjectConfig;
   state?: ConsultancyState;
 }
 
@@ -353,6 +356,7 @@ export interface CreateProjectRequest {
 
 export interface CreateProjectResponse {
   workflow_id: string;
+  status?: string;
   message?: string;
 }
 
@@ -361,7 +365,8 @@ export interface SendMessageRequest {
 }
 
 export interface SendMessageResponse {
-  status: string;
+  status?: string;
+  success?: boolean;
   message?: string;
 }
 
@@ -377,6 +382,7 @@ export interface ApiError {
 export interface User {
   id: string;
   email: string;
+  name: string;
   tenant_id: string;
   tenant_name: string;
   role: string;
@@ -397,6 +403,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   password: string;
+  name: string;
   tenant_name: string;
 }
 

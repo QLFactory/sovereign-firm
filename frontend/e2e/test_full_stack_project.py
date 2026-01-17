@@ -149,6 +149,7 @@ class FullStackProjectTest:
         page.wait_for_selector("input#tenantName", timeout=10000)
 
         page.fill("input#tenantName", self.test_tenant)
+        page.fill("input#name", f"Test User {random_string(4)}")
         page.fill("input#email", self.test_email)
         page.fill("input#password", self.test_password)
         page.fill("input#confirmPassword", self.test_password)

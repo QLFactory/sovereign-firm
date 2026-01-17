@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [name, setName] = useState("");
   const [tenantName, setTenantName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function RegisterPage() {
     e.preventDefault();
 
     // Validate inputs
-    if (!email || !password || !confirmPassword || !tenantName) {
+    if (!email || !password || !confirmPassword || !name || !tenantName) {
       setValidationError("All fields are required");
       return;
     }
@@ -58,7 +59,7 @@ export default function RegisterPage() {
     }
 
     setIsSubmitting(true);
-    const success = await register({ email, password, tenant_name: tenantName });
+    const success = await register({ email, password, name, tenant_name: tenantName });
     setIsSubmitting(false);
 
     if (success) {
@@ -139,6 +140,22 @@ export default function RegisterPage() {
               </div>
 
               <div>
+                <label htmlFor="name" className="input-label">
+                  Your Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); clearErrors(); }}
+                  className="input"
+                  placeholder="John Doe"
+                  required
+                  autoComplete="name"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="email" className="input-label">
                   Email Address
                 </label>
@@ -189,7 +206,7 @@ export default function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || !email || !password || !confirmPassword || !tenantName}
+                disabled={isSubmitting || !email || !password || !confirmPassword || !name || !tenantName}
                 className="btn btn-primary w-full py-4 text-base disabled:opacity-50 disabled:cursor-not-allowed mt-2"
               >
                 {isSubmitting ? (
