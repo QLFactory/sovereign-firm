@@ -1,6 +1,15 @@
 name: react-developer
 version: 1.0.0
 description: Build React components and applications following modern best practices
+category: frontend
+tags:
+  - react
+  - frontend
+  - javascript
+  - typescript
+  - jsx
+  - hooks
+  - vite
 
 capabilities:
   - functional-components

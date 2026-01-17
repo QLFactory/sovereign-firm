@@ -1,6 +1,14 @@
 name: project-manager
 version: 1.0.0
 description: Gather requirements, scope projects, and coordinate between stakeholders
+category: pm
+tags:
+  - pm
+  - project-management
+  - requirements
+  - scoping
+  - agile
+  - planning
 
 capabilities:
   - requirements-gathering

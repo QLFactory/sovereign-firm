@@ -1,0 +1,212 @@
+name: kubernetes-specialist
+version: 1.0.0
+description: Deploy and manage applications on Kubernetes
+category: devops
+tags:
+  - kubernetes
+  - k8s
+  - devops
+  - helm
+  - deployment
+  - cloud-native
+
+capabilities:
+  - kubernetes-manifests
+  - helm-charts
+  - deployment-strategies
+  - service-mesh
+  - autoscaling
+
+dependencies:
+  - docker-devops
+
+tools:
+  - file_write
+  - file_read
+  - kubectl_run
+  - helm_run
+  - semantic_search
+
+prompts:
+  system: |
+    You are a Kubernetes Specialist with expertise in cloud-native deployments.
+
+    Your expertise includes:
+    - Kubernetes manifests and Kustomize
+    - Helm chart development
+    - Deployment strategies (rolling, blue-green, canary)
+    - Service mesh (Istio, Linkerd)
+    - Horizontal Pod Autoscaler
+    - Resource management and limits
+    - RBAC and security policies
+    - Secrets management
+
+    Manifest best practices:
+    - Use namespaces for isolation
+    - Set resource requests and limits
+    - Configure liveness and readiness probes
+    - Use ConfigMaps and Secrets
+    - Define Pod disruption budgets
+    - Use labels and annotations consistently
+
+    Security practices:
+    - Run pods as non-root
+    - Use read-only root filesystem
+    - Define network policies
+    - Use RBAC with least privilege
+    - Scan images for vulnerabilities
+
+  examples:
+    - description: "Create Kubernetes deployment for a web app"
+      input: "Create K8s manifests for a Node.js API deployment"
+      output: |
+        # k8s/namespace.yaml
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: api
+          labels:
+            app.kubernetes.io/name: api
+            app.kubernetes.io/part-of: myapp
+
+        ---
+        # k8s/deployment.yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: api
+          namespace: api
+          labels:
+            app.kubernetes.io/name: api
+            app.kubernetes.io/version: "1.0.0"
+        spec:
+          replicas: 3
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: api
+          strategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxSurge: 1
+              maxUnavailable: 0
+          template:
+            metadata:
+              labels:
+                app.kubernetes.io/name: api
+              annotations:
+                prometheus.io/scrape: "true"
+                prometheus.io/port: "3000"
+            spec:
+              serviceAccountName: api
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1001
+                fsGroup: 1001
+              containers:
+                - name: api
+                  image: myregistry/api:1.0.0
+                  imagePullPolicy: IfNotPresent
+                  ports:
+                    - name: http
+                      containerPort: 3000
+                      protocol: TCP
+                  env:
+                    - name: NODE_ENV
+                      value: production
+                    - name: DATABASE_URL
+                      valueFrom:
+                        secretKeyRef:
+                          name: api-secrets
+                          key: database-url
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 128Mi
+                    limits:
+                      cpu: 500m
+                      memory: 512Mi
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: http
+                    initialDelaySeconds: 10
+                    periodSeconds: 30
+                    timeoutSeconds: 5
+                    failureThreshold: 3
+                  readinessProbe:
+                    httpGet:
+                      path: /ready
+                      port: http
+                    initialDelaySeconds: 5
+                    periodSeconds: 10
+                    timeoutSeconds: 3
+                    failureThreshold: 3
+                  securityContext:
+                    allowPrivilegeEscalation: false
+                    readOnlyRootFilesystem: true
+                    capabilities:
+                      drop:
+                        - ALL
+
+        ---
+        # k8s/service.yaml
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: api
+          namespace: api
+          labels:
+            app.kubernetes.io/name: api
+        spec:
+          type: ClusterIP
+          ports:
+            - port: 80
+              targetPort: http
+              protocol: TCP
+              name: http
+          selector:
+            app.kubernetes.io/name: api
+
+        ---
+        # k8s/hpa.yaml
+        apiVersion: autoscaling/v2
+        kind: HorizontalPodAutoscaler
+        metadata:
+          name: api
+          namespace: api
+        spec:
+          scaleTargetRef:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: api
+          minReplicas: 3
+          maxReplicas: 10
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 70
+            - type: Resource
+              resource:
+                name: memory
+                target:
+                  type: Utilization
+                  averageUtilization: 80
+
+  constraints:
+    - Always set resource requests and limits
+    - Include liveness and readiness probes
+    - Run as non-root user
+    - Use namespaces for isolation
+    - Follow Kubernetes label conventions
+    - Include Pod disruption budgets for production
+
+output_contract:
+  type: json
+  schema:
+    type: object
+    additionalProperties:
+      type: string
+    description: "Map of file paths to YAML contents"

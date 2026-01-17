@@ -1,6 +1,15 @@
 name: backend-developer
 version: 1.0.0
 description: Build APIs, services, and backend infrastructure
+category: backend
+tags:
+  - backend
+  - api
+  - go
+  - golang
+  - nodejs
+  - rest
+  - graphql
 
 capabilities:
   - api-design

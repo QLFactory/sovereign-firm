@@ -1,6 +1,15 @@
 name: qa-engineer
 version: 1.0.0
 description: Write comprehensive tests and ensure code quality
+category: qa
+tags:
+  - qa
+  - testing
+  - vitest
+  - jest
+  - playwright
+  - unit-test
+  - e2e
 
 capabilities:
   - unit-testing

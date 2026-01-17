@@ -70,7 +70,11 @@ const phaseColors: Record<string, string> = {
   DELIVERED: "bg-green-600",
 };
 
-export default function PodConsole() {
+interface PodConsoleProps {
+  workflowId?: string;
+}
+
+export default function PodConsole({ workflowId: propWorkflowId }: PodConsoleProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -101,7 +105,7 @@ export default function PodConsole() {
   const fileBuffersRef = useRef<Record<string, string[]>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize workflow ID from URL param or localStorage
+  // Initialize workflow ID from prop, URL param, or localStorage
   useEffect(() => {
     if (isInitialized) return;
 
@@ -110,21 +114,26 @@ export default function PodConsole() {
       ? localStorage.getItem(WORKFLOW_STORAGE_KEY)
       : null;
 
-    if (urlWorkflowId) {
-      // URL param takes priority
+    // Priority: 1) Prop, 2) URL param, 3) localStorage
+    if (propWorkflowId) {
+      setWorkflowID(propWorkflowId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(WORKFLOW_STORAGE_KEY, propWorkflowId);
+      }
+      setStatus("Reconnecting to workflow...");
+    } else if (urlWorkflowId) {
       setWorkflowID(urlWorkflowId);
       if (typeof window !== "undefined") {
         localStorage.setItem(WORKFLOW_STORAGE_KEY, urlWorkflowId);
       }
       setStatus("Reconnecting to workflow...");
     } else if (storedWorkflowId) {
-      // Fall back to localStorage
       setWorkflowID(storedWorkflowId);
       setStatus("Reconnecting to workflow...");
     }
 
     setIsInitialized(true);
-  }, [searchParams, isInitialized]);
+  }, [searchParams, isInitialized, propWorkflowId]);
 
   // Persist workflow ID to localStorage and URL when it changes
   useEffect(() => {
@@ -429,16 +438,26 @@ export default function PodConsole() {
               break;
           }
 
-          // Update files if available
-          if (state.code_files && Object.keys(state.code_files).length > 0) {
+          // Update files if available - check all possible field names
+          const codeFiles = state.all_code_files || state.code_files || {};
+
+          // Also merge frontend_code and backend_code if available
+          const mergedFiles = {
+            ...codeFiles,
+            ...(state.frontend_code || {}),
+            ...(state.backend_code || {}),
+            ...(state.database_code || {}),
+          };
+
+          if (Object.keys(mergedFiles).length > 0) {
             setFiles((prev) => ({
               ...prev,
-              ...state.code_files,
+              ...mergedFiles,
             }));
 
             // Auto-select App.jsx if not already selected
             if (!selectedFile) {
-              const appFile = Object.keys(state.code_files).find(
+              const appFile = Object.keys(mergedFiles).find(
                 (f) => f.includes("App.jsx") || f.includes("App.tsx")
               );
               if (appFile) setSelectedFile(appFile);

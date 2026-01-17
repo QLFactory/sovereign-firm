@@ -1,0 +1,157 @@
+name: mongodb-specialist
+version: 1.0.0
+description: Design and optimize MongoDB databases
+category: database
+tags:
+  - mongodb
+  - database
+  - nosql
+  - document
+  - aggregation
+
+capabilities:
+  - schema-design
+  - aggregation-pipelines
+  - indexing
+  - sharding
+  - performance-tuning
+
+dependencies: []
+
+tools:
+  - file_write
+  - file_read
+  - mongo_run
+  - semantic_search
+
+prompts:
+  system: |
+    You are a MongoDB Database Specialist with expertise in document databases.
+
+    Your expertise includes:
+    - Document schema design
+    - Aggregation pipelines
+    - Index strategies (compound, text, geospatial)
+    - Sharding and replication
+    - Change streams
+    - Transactions
+    - Atlas features
+
+    Schema design principles:
+    - Embed when data is accessed together
+    - Reference when data is accessed independently
+    - Consider document size limits (16MB)
+    - Design for your query patterns
+    - Use appropriate data types (ObjectId, Date, Decimal128)
+
+    Indexing strategy:
+    - Create indexes based on query patterns
+    - Use compound indexes for multi-field queries
+    - Consider index selectivity
+    - Monitor index usage with $indexStats
+    - Use sparse indexes for optional fields
+
+  examples:
+    - description: "Design a user collection with embedded data"
+      input: "Design a users collection for an e-commerce app"
+      output: |
+        // collections/users.js
+        // Schema definition for documentation (use with Mongoose or similar)
+
+        const userSchema = {
+          _id: ObjectId,
+          email: String,        // unique, indexed
+          passwordHash: String,
+          profile: {
+            firstName: String,
+            lastName: String,
+            avatar: String,
+            phone: String
+          },
+          addresses: [{
+            _id: ObjectId,
+            label: String,      // "home", "work", etc.
+            street: String,
+            city: String,
+            state: String,
+            postalCode: String,
+            country: String,
+            isDefault: Boolean
+          }],
+          preferences: {
+            newsletter: Boolean,
+            currency: String,
+            language: String
+          },
+          status: String,       // "active", "suspended", "deleted"
+          lastLoginAt: Date,
+          createdAt: Date,
+          updatedAt: Date
+        };
+
+        // indexes/users.js
+        // Create indexes for the users collection
+
+        db.users.createIndexes([
+          // Unique email index
+          {
+            key: { email: 1 },
+            unique: true,
+            name: "idx_email_unique"
+          },
+          // Status index for filtering active users
+          {
+            key: { status: 1 },
+            name: "idx_status"
+          },
+          // Compound index for listing with sorting
+          {
+            key: { status: 1, createdAt: -1 },
+            name: "idx_status_created"
+          },
+          // Text index for search
+          {
+            key: {
+              email: "text",
+              "profile.firstName": "text",
+              "profile.lastName": "text"
+            },
+            name: "idx_user_search"
+          },
+          // TTL index example (for sessions collection)
+          // { key: { expireAt: 1 }, expireAfterSeconds: 0 }
+        ]);
+
+        // Sample aggregation pipeline for user analytics
+        const userAnalyticsPipeline = [
+          { $match: { status: "active" } },
+          {
+            $group: {
+              _id: {
+                year: { $year: "$createdAt" },
+                month: { $month: "$createdAt" }
+              },
+              count: { $sum: 1 },
+              withPhone: {
+                $sum: { $cond: [{ $ne: ["$profile.phone", null] }, 1, 0] }
+              }
+            }
+          },
+          { $sort: { "_id.year": -1, "_id.month": -1 } }
+        ];
+
+  constraints:
+    - Consider document size limits (16MB max)
+    - Design for your most common query patterns
+    - Avoid unbounded array growth
+    - Use ObjectId for references
+    - Include createdAt and updatedAt timestamps
+    - Document schema for future developers
+
+output_contract:
+  type: json
+  schema:
+    type: object
+    additionalProperties:
+      type: string
+    description: "Map of file paths to JavaScript/JSON contents"

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/qlfactory/sovereign-firm/pkg/firm/workflows"
@@ -97,8 +98,20 @@ func handlePodAction(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Not found", http.StatusNotFound)
 }
 
+// StartPodRequest matches ConsultancyConfig for full-stack project generation
 type StartPodRequest struct {
-	ProjectName string `json:"project_name"`
+	ProjectName       string `json:"project_name"`
+	ClientID          string `json:"client_id,omitempty"`
+	InitialMessage    string `json:"initial_message,omitempty"`
+	EnableFullStack   bool   `json:"enable_full_stack,omitempty"`
+	EnableDeployment  bool   `json:"enable_deployment,omitempty"`
+	EnableSRE         bool   `json:"enable_sre,omitempty"`
+	PreferredFrontend string `json:"preferred_frontend,omitempty"`
+	PreferredBackend  string `json:"preferred_backend,omitempty"`
+	PreferredDatabase string `json:"preferred_database,omitempty"`
+	PreferredCloud    string `json:"preferred_cloud,omitempty"`
+	MaxCodeAttempts   int    `json:"max_code_attempts,omitempty"`
+	MaxTestAttempts   int    `json:"max_test_attempts,omitempty"`
 }
 
 func startPodHandler(w http.ResponseWriter, r *http.Request) {
@@ -108,21 +121,49 @@ func startPodHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert request to ConsultancyConfig
+	config := workflows.ConsultancyConfig{
+		ProjectName:       req.ProjectName,
+		ClientID:          req.ClientID,
+		InitialMessage:    req.InitialMessage,
+		EnableFullStack:   req.EnableFullStack,
+		EnableDeployment:  req.EnableDeployment,
+		EnableSRE:         req.EnableSRE,
+		PreferredFrontend: req.PreferredFrontend,
+		PreferredBackend:  req.PreferredBackend,
+		PreferredDatabase: req.PreferredDatabase,
+		PreferredCloud:    req.PreferredCloud,
+		MaxCodeAttempts:   req.MaxCodeAttempts,
+		MaxTestAttempts:   req.MaxTestAttempts,
+	}
+
+	// Set defaults if not provided
+	if config.ClientID == "" {
+		config.ClientID = "default-client"
+	}
+	if config.MaxCodeAttempts <= 0 {
+		config.MaxCodeAttempts = 3
+	}
+	if config.MaxTestAttempts <= 0 {
+		config.MaxTestAttempts = 3
+	}
+
+	workflowID := fmt.Sprintf("consultancy_%s_%d", strings.ReplaceAll(req.ProjectName, " ", "_"), time.Now().Unix())
+
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        "project_" + req.ProjectName,
+		ID:        workflowID,
 		TaskQueue: "sovereign-firm-tasks",
 	}
 
-	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.ProjectLifecycle, req)
+	// Use ConsultancyWorkflow for full artifact generation
+	we, err := temporalClient.ExecuteWorkflow(context.Background(), workflowOptions, workflows.ConsultancyWorkflow, config)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to start workflow: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	workflowID := we.GetID()
-
 	// Broadcast phase change event
-	streamHub.BroadcastPhaseChange(workflowID, "", "DISCOVERY", "Project workflow started")
+	streamHub.BroadcastPhaseChange(workflowID, "", "INTAKE", "Consultancy workflow started")
 
 	json.NewEncoder(w).Encode(map[string]string{
 		"workflow_id": workflowID,
@@ -165,7 +206,8 @@ func getPodStatusHandler(w http.ResponseWriter, r *http.Request, workflowID stri
 		return
 	}
 
-	var state workflows.ProjectState
+	// Use ConsultancyState for full artifact access
+	var state workflows.ConsultancyState
 	if err := resp.Get(&state); err != nil {
 		http.Error(w, "Failed to decode state", http.StatusInternalServerError)
 		return

@@ -80,16 +80,52 @@ const defaultPackageJson = {
   dependencies: {
     react: "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "axios": "^1.6.0",
+    "zustand": "^4.5.0",
+    "lucide-react": "^0.344.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.0",
   },
   devDependencies: {
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^14.2.1",
     "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
     jsdom: "^24.0.0",
     vite: "^5.1.0",
     vitest: "^1.3.1",
   },
 };
+
+// Merge generated package.json dependencies with defaults
+function mergePackageJson(generated: string | undefined): string {
+  const base = { ...defaultPackageJson };
+
+  if (generated) {
+    try {
+      const genPkg = JSON.parse(generated);
+      // Merge dependencies
+      if (genPkg.dependencies) {
+        base.dependencies = { ...base.dependencies, ...genPkg.dependencies };
+      }
+      // Merge devDependencies
+      if (genPkg.devDependencies) {
+        base.devDependencies = { ...base.devDependencies, ...genPkg.devDependencies };
+      }
+      // Keep name if provided
+      if (genPkg.name) {
+        base.name = genPkg.name;
+      }
+    } catch (e) {
+      console.warn("Failed to parse generated package.json, using defaults");
+    }
+  }
+
+  return JSON.stringify(base, null, 2);
+}
 
 // Default vite.config.js with vitest
 const defaultViteConfig = `import { defineConfig } from 'vite'
@@ -111,6 +147,32 @@ export default defineConfig({
 // Default test setup file
 const defaultSetupTests = `import '@testing-library/jest-dom'`;
 
+// Default Tailwind config
+const defaultTailwindConfig = `/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}`;
+
+// Default PostCSS config
+const defaultPostcssConfig = `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}`;
+
+// Default Tailwind CSS file
+const defaultTailwindCss = `@tailwind base;
+@tailwind components;
+@tailwind utilities;`;
+
 // Default index.html
 const defaultIndexHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -129,6 +191,7 @@ const defaultIndexHtml = `<!DOCTYPE html>
 const defaultMainJsx = `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -360,9 +423,9 @@ export default function WebContainerPreview({
           };
         }
 
-        // Always use our package.json to ensure compatible dependencies
-        // (LLM-generated package.json may have version conflicts)
-        filesToMount["/package.json"] = JSON.stringify(defaultPackageJson, null, 2);
+        // Merge generated package.json with our defaults to ensure all dependencies are included
+        const generatedPkg = files["/package.json"] || files["package.json"];
+        filesToMount["/package.json"] = mergePackageJson(generatedPkg);
 
         // Always use our vite.config for consistent setup
         filesToMount["/vite.config.js"] = defaultViteConfig;
@@ -381,6 +444,37 @@ export default function WebContainerPreview({
         const hasTestFiles = Object.keys(filesToMount).some((f) => f.includes(".test."));
         if (hasTestFiles && !Object.keys(filesToMount).some((f) => f.includes("setupTests"))) {
           filesToMount["/src/setupTests.js"] = defaultSetupTests;
+        }
+
+        // Add Tailwind config files if CSS uses tailwind directives
+        const hasTailwind = Object.values(filesToMount).some(
+          (content) => typeof content === "string" && content.includes("@tailwind")
+        );
+        if (hasTailwind || Object.keys(filesToMount).some((f) => f.includes("tailwind"))) {
+          if (!Object.keys(filesToMount).some((f) => f.includes("tailwind.config"))) {
+            filesToMount["/tailwind.config.js"] = defaultTailwindConfig;
+          }
+          if (!Object.keys(filesToMount).some((f) => f.includes("postcss.config"))) {
+            filesToMount["/postcss.config.js"] = defaultPostcssConfig;
+          }
+        }
+
+        // Ensure there's a CSS file with tailwind directives if using tailwind components
+        const usesTailwindClasses = Object.values(filesToMount).some(
+          (content) => typeof content === "string" && /className=["'][^"']*(?:flex|grid|p-|m-|bg-|text-)/.test(content)
+        );
+        if (usesTailwindClasses) {
+          // Add tailwind CSS if not present
+          if (!Object.keys(filesToMount).some((f) => f.includes("index.css") || f.includes("globals.css"))) {
+            filesToMount["/src/index.css"] = defaultTailwindCss;
+          }
+          // Ensure tailwind configs exist
+          if (!Object.keys(filesToMount).some((f) => f.includes("tailwind.config"))) {
+            filesToMount["/tailwind.config.js"] = defaultTailwindConfig;
+          }
+          if (!Object.keys(filesToMount).some((f) => f.includes("postcss.config"))) {
+            filesToMount["/postcss.config.js"] = defaultPostcssConfig;
+          }
         }
 
         setStatus("Mounting files...");

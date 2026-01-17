@@ -1,6 +1,13 @@
 name: architect
 version: 1.0.0
 description: Design system architecture and make high-level technical decisions
+category: architect
+tags:
+  - architecture
+  - system-design
+  - tech-selection
+  - api-design
+  - microservices
 
 capabilities:
   - system-design
