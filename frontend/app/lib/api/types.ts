@@ -140,49 +140,74 @@ export interface ArtifactCategory {
 
 export function categorizeArtifacts(state: ConsultancyState): ArtifactCategory[] {
   const categories: ArtifactCategory[] = [];
+  const allFiles = state.all_code_files || {};
+
+  // Helper to safely get object keys count
+  const safeKeys = (obj: Record<string, string> | null | undefined): string[] =>
+    obj && typeof obj === "object" ? Object.keys(obj) : [];
+
+  // Helper to check if a file is a test file
+  const isTestFile = (path: string): boolean =>
+    /\.(test|spec)\.(js|jsx|ts|tsx)$/.test(path) ||
+    path.includes("__tests__") ||
+    path.includes("/tests/");
+
+  // Helper to check if a file is a DevOps file
+  const isDevOpsFile = (path: string): boolean =>
+    /dockerfile/i.test(path) ||
+    /docker-compose/i.test(path) ||
+    /\.ya?ml$/.test(path) && (path.includes("workflow") || path.includes("ci") || path.includes("github"));
 
   // Frontend
-  if (state.frontend_code && Object.keys(state.frontend_code).length > 0) {
+  if (safeKeys(state.frontend_code).length > 0) {
     categories.push({
       id: "frontend",
       name: "Frontend",
       icon: "⚛️",
       description: "React components, pages, and styles",
-      fileCount: Object.keys(state.frontend_code).length,
-      files: state.frontend_code,
+      fileCount: safeKeys(state.frontend_code).length,
+      files: state.frontend_code!,
     });
   }
 
   // Backend
-  if (state.backend_code && Object.keys(state.backend_code).length > 0) {
+  if (safeKeys(state.backend_code).length > 0) {
     categories.push({
       id: "backend",
       name: "Backend",
       icon: "🔧",
       description: "API routes, controllers, and models",
-      fileCount: Object.keys(state.backend_code).length,
-      files: state.backend_code,
+      fileCount: safeKeys(state.backend_code).length,
+      files: state.backend_code!,
     });
   }
 
   // Database
-  if (state.database_code && Object.keys(state.database_code).length > 0) {
+  if (safeKeys(state.database_code).length > 0) {
     categories.push({
       id: "database",
       name: "Database",
       icon: "🗄️",
       description: "Schema and migrations",
-      fileCount: Object.keys(state.database_code).length,
-      files: state.database_code,
+      fileCount: safeKeys(state.database_code).length,
+      files: state.database_code!,
     });
   }
 
-  // Tests
-  const allTests = {
-    ...state.unit_tests,
-    ...state.integration_tests,
-    ...state.e2e_tests,
+  // Tests - from dedicated fields AND from all_code_files
+  const allTests: Record<string, string> = {
+    ...(state.unit_tests || {}),
+    ...(state.integration_tests || {}),
+    ...(state.e2e_tests || {}),
   };
+
+  // Also extract test files from all_code_files if not already in dedicated fields
+  Object.entries(allFiles).forEach(([path, content]) => {
+    if (isTestFile(path) && !allTests[path]) {
+      allTests[path] = content;
+    }
+  });
+
   if (Object.keys(allTests).length > 0) {
     categories.push({
       id: "tests",
@@ -194,68 +219,102 @@ export function categorizeArtifacts(state: ConsultancyState): ArtifactCategory[]
     });
   }
 
-  // DevOps (single files)
+  // DevOps - from dedicated fields AND from all_code_files
   const devopsFiles: Record<string, string> = {};
-  if (state.dockerfile) devopsFiles["Dockerfile"] = state.dockerfile;
-  if (state.docker_compose) devopsFiles["docker-compose.yml"] = state.docker_compose;
-  if (state.ci_pipeline) devopsFiles[".github/workflows/ci.yml"] = state.ci_pipeline;
+  if (state.dockerfile && state.dockerfile.length > 0) {
+    devopsFiles["Dockerfile"] = state.dockerfile;
+  }
+  if (state.docker_compose && state.docker_compose.length > 0) {
+    devopsFiles["docker-compose.yml"] = state.docker_compose;
+  }
+  if (state.ci_pipeline && state.ci_pipeline.length > 0) {
+    devopsFiles[".github/workflows/ci.yml"] = state.ci_pipeline;
+  }
+
+  // Also extract DevOps files from all_code_files
+  Object.entries(allFiles).forEach(([path, content]) => {
+    if (isDevOpsFile(path) && !devopsFiles[path]) {
+      devopsFiles[path] = content;
+    }
+  });
 
   if (Object.keys(devopsFiles).length > 0) {
     categories.push({
       id: "devops",
       name: "DevOps",
       icon: "🐳",
-      description: "Dockerfile, docker-compose, CI pipeline",
+      description: "Dockerfile, docker-compose, CI/CD pipelines",
       fileCount: Object.keys(devopsFiles).length,
       files: devopsFiles,
     });
   }
 
   // Kubernetes
-  if (state.kube_manifests && Object.keys(state.kube_manifests).length > 0) {
+  if (safeKeys(state.kube_manifests).length > 0) {
     categories.push({
       id: "kubernetes",
       name: "Kubernetes",
       icon: "☸️",
       description: "Deployment, service, ingress, HPA",
-      fileCount: Object.keys(state.kube_manifests).length,
-      files: state.kube_manifests,
+      fileCount: safeKeys(state.kube_manifests).length,
+      files: state.kube_manifests!,
     });
   }
 
   // Helm
-  if (state.helm_chart && Object.keys(state.helm_chart).length > 0) {
+  if (safeKeys(state.helm_chart).length > 0) {
     categories.push({
       id: "helm",
       name: "Helm Chart",
       icon: "⎈",
       description: "Chart, values, and templates",
-      fileCount: Object.keys(state.helm_chart).length,
-      files: state.helm_chart,
+      fileCount: safeKeys(state.helm_chart).length,
+      files: state.helm_chart!,
     });
   }
 
   // Terraform
-  if (state.infra_code && Object.keys(state.infra_code).length > 0) {
+  if (safeKeys(state.infra_code).length > 0) {
     categories.push({
       id: "terraform",
       name: "Terraform",
       icon: "🏗️",
       description: "VPC, ECS, RDS, Redis",
-      fileCount: Object.keys(state.infra_code).length,
-      files: state.infra_code,
+      fileCount: safeKeys(state.infra_code).length,
+      files: state.infra_code!,
     });
   }
 
-  // SRE - Runbooks
-  if (state.runbooks && Object.keys(state.runbooks).length > 0) {
+  // SRE - Runbooks, alerts, dashboards
+  const sreFiles: Record<string, string> = {
+    ...(state.runbooks || {}),
+  };
+
+  // Add monitoring config, alerts, dashboards
+  if (state.monitoring_config && typeof state.monitoring_config === "object") {
+    Object.entries(state.monitoring_config).forEach(([k, v]) => {
+      if (typeof v === "string") sreFiles[`monitoring/${k}`] = v;
+    });
+  }
+  if (state.alert_rules && typeof state.alert_rules === "object") {
+    Object.entries(state.alert_rules).forEach(([k, v]) => {
+      if (typeof v === "string") sreFiles[`alerts/${k}`] = v;
+    });
+  }
+  if (state.dashboards && typeof state.dashboards === "object") {
+    Object.entries(state.dashboards).forEach(([k, v]) => {
+      if (typeof v === "string") sreFiles[`dashboards/${k}`] = v;
+    });
+  }
+
+  if (Object.keys(sreFiles).length > 0) {
     categories.push({
       id: "sre",
       name: "SRE",
       icon: "📟",
       description: "Runbooks, alerts, dashboards",
-      fileCount: Object.keys(state.runbooks).length,
-      files: state.runbooks,
+      fileCount: Object.keys(sreFiles).length,
+      files: sreFiles,
     });
   }
 
