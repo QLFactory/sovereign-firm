@@ -204,32 +204,93 @@ class ApiClient {
   // ==========================================================================
 
   /**
-   * Create a new project/pod
+   * Create a new project (uses authenticated /projects endpoint)
    */
   async createProject(config: CreateProjectRequest): Promise<CreateProjectResponse> {
+    // Use authenticated endpoint if we have a token, otherwise fallback to legacy
+    if (this.accessToken) {
+      const response = await this.request<{
+        id: string;
+        workflow_id: string;
+        name: string;
+        phase: string;
+      }>("/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          name: config.project_name,
+          description: config.initial_message,
+          initial_message: config.initial_message,
+          enable_full_stack: config.enable_full_stack,
+          enable_deployment: config.enable_deployment,
+          enable_sre: config.enable_sre,
+          preferred_frontend: config.preferred_frontend,
+          preferred_backend: config.preferred_backend,
+          preferred_database: config.preferred_database,
+          preferred_cloud: config.preferred_cloud,
+        }),
+      });
+      return {
+        workflow_id: response.workflow_id,
+        status: "started",
+      };
+    }
+
+    // Fallback to legacy endpoint for unauthenticated access
     return this.request<CreateProjectResponse>("/pods", {
       method: "POST",
       body: JSON.stringify(config),
-    });
+    }, false);
   }
 
   /**
-   * Get project state by ID
+   * Get project state by workflow ID or project ID
    */
   async getProject(id: string): Promise<ConsultancyState> {
-    return this.request<ConsultancyState>(`/pods/${id}`);
+    // Try authenticated endpoint first
+    if (this.accessToken) {
+      try {
+        // First try to get state from /projects/{id}/state
+        return await this.request<ConsultancyState>(`/projects/${id}/state`);
+      } catch {
+        // Fallback to legacy endpoint
+      }
+    }
+    return this.request<ConsultancyState>(`/pods/${id}`, {}, false);
   }
 
   /**
-   * List all projects (if backend supports it)
+   * List all projects for the current user
    */
   async listProjects(): Promise<Project[]> {
-    try {
-      return this.request<Project[]>("/pods");
-    } catch {
-      // If backend doesn't support listing, return empty array
-      return [];
+    if (this.accessToken) {
+      try {
+        const response = await this.request<{
+          projects: Array<{
+            id: string;
+            workflow_id: string;
+            name: string;
+            description?: string;
+            phase: string;
+            status: string;
+            created_at: string;
+          }>;
+        }>("/projects");
+
+        // Transform to Project format
+        return response.projects.map((p) => ({
+          id: p.workflow_id,
+          workflow_id: p.workflow_id,
+          name: p.name,
+          description: p.description,
+          status: p.status === "active" ? "running" : p.status,
+          phase: p.phase as Project["phase"],
+          created_at: p.created_at,
+        }));
+      } catch {
+        return [];
+      }
     }
+    return [];
   }
 
   /**
@@ -240,10 +301,23 @@ class ApiClient {
     message: string
   ): Promise<SendMessageResponse> {
     const request: SendMessageRequest = { message };
+
+    if (this.accessToken) {
+      try {
+        await this.request(`/projects/${projectId}/message`, {
+          method: "POST",
+          body: JSON.stringify(request),
+        });
+        return { success: true };
+      } catch {
+        // Fallback to legacy
+      }
+    }
+
     return this.request<SendMessageResponse>(`/pods/${projectId}`, {
       method: "POST",
       body: JSON.stringify(request),
-    });
+    }, false);
   }
 
   // ==========================================================================

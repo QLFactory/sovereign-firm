@@ -225,6 +225,13 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		MaxTestAttempts:   3,
 	}
 
+	// Serialize config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		jsonError(w, "failed to serialize config", http.StatusInternalServerError)
+		return
+	}
+
 	// Start transaction
 	tx, err := h.db.Begin(ctx)
 	if err != nil {
@@ -240,7 +247,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO projects (tenant_id, workflow_id, name, description, config, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id, created_at, updated_at`,
-		tenantID, workflowID, req.Name, req.Description, config, userID,
+		tenantID, workflowID, req.Name, req.Description, configJSON, userID,
 	).Scan(&projectID, &createdAt, &updatedAt)
 	if err != nil {
 		jsonError(w, "failed to create project", http.StatusInternalServerError)
