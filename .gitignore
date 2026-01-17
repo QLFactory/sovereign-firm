@@ -33,6 +33,15 @@ docker-compose.override.yaml
 # MacOS
 .DS_Store
 
+# Test Artifacts
+e2e/results/
+e2e/journey_results/
+e2e/screenshots/
+frontend/e2e/__pycache__/
+frontend/e2e/results/
+**/*.webm
+**/trace.zip
+
 # Brain/Artifacts (Don't version the Agent's brain unless requested, but maybe user wants it?)
 # Typically we exclude large artifacts.
 # For now, let's include brain for history, but maybe exclude the large Chroma DB files if they were local?
