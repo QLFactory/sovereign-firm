@@ -46,3 +46,4 @@ frontend/e2e/results/
 # Typically we exclude large artifacts.
 # For now, let's include brain for history, but maybe exclude the large Chroma DB files if they were local?
 # The chroma db is in docker volume, not here.
+e2e/complete_journey_results/
