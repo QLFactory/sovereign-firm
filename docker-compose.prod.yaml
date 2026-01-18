@@ -1,41 +1,40 @@
-version: '3.8'
-
 services:
   # --- Infrastructure ---
   postgres:
-    image: postgres:13
+    image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=temporal
-      - POSTGRES_HOST_AUTH_METHOD=trust
+      POSTGRES_USER: sovereign
+      POSTGRES_PASSWORD: sovereign123
+      POSTGRES_DB: sovereign_firm
     networks:
       - sovereign-net
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: ["CMD-SHELL", "pg_isready -U sovereign -d sovereign_firm"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   temporal:
-    image: temporalio/auto-setup:1.21.3
+    image: temporalio/auto-setup:latest
     environment:
-      - DB=postgresql
+      - DB=postgres12
       - DB_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_USER=sovereign
+      - POSTGRES_PWD=sovereign123
       - POSTGRES_SEEDS=postgres
+      - SKIP_DEFAULT_NAMESPACE_CREATION=false
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - sovereign-net
     ports:
-      - "7233:7233" # GRPC exposed for external workers if needed
+      - "7233:7233"
 
   temporal-ui:
-    image: temporalio/ui:2.25.0
+    image: temporalio/ui:latest
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
     ports:
@@ -60,8 +59,9 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.backend
-    command: [ "/app/orchestrator" ]
+    command: ["/app/orchestrator"]
     environment:
+      - DATABASE_URL=postgres://sovereign:sovereign123@postgres:5432/sovereign_firm?sslmode=disable
       - TEMPORAL_HOST=temporal:7233
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
@@ -75,8 +75,12 @@ services:
       - "8080:8080"
     restart: on-failure
     depends_on:
-      - temporal
-      - chroma
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      chroma:
+        condition: service_started
     networks:
       - sovereign-net
 
@@ -84,8 +88,9 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.backend
-    command: [ "/app/worker" ]
+    command: ["/app/worker"]
     environment:
+      - DATABASE_URL=postgres://sovereign:sovereign123@postgres:5432/sovereign_firm?sslmode=disable
       - TEMPORAL_HOST=temporal:7233
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
@@ -97,8 +102,10 @@ services:
       - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-text-embedding-ada-002}
     restart: on-failure
     depends_on:
-      - temporal
-      - orchestrator
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
     networks:
       - sovereign-net
 

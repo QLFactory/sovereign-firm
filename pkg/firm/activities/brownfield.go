@@ -43,18 +43,18 @@ func (b *BrownfieldAnalyzer) Close() {
 // BrownfieldParams configures brownfield analysis
 type BrownfieldParams struct {
 	// Source - one of these must be provided
-	RepoURL    string // Git repository URL to clone
-	LocalPath  string // Local directory path
+	RepoURL   string `json:"repo_url,omitempty"`   // Git repository URL to clone
+	LocalPath string `json:"local_path,omitempty"` // Local directory path
 
 	// Context
-	ProjectID  string
-	ClientID   string
+	ProjectID string `json:"project_id"`
+	ClientID  string `json:"client_id"`
 
 	// Options
-	MaxFiles       int      // Maximum files to index (0 = unlimited)
-	SkipPatterns   []string // Glob patterns to skip
-	IncludeTests   bool     // Include test files in analysis
-	StoreGlobally  bool     // Also store patterns at global level
+	MaxFiles      int      `json:"max_files,omitempty"`      // Maximum files to index (0 = unlimited)
+	SkipPatterns  []string `json:"skip_patterns,omitempty"`  // Glob patterns to skip
+	IncludeTests  bool     `json:"include_tests,omitempty"`  // Include test files in analysis
+	StoreGlobally bool     `json:"store_globally,omitempty"` // Also store patterns at global level
 }
 
 // BrownfieldResult contains analysis results

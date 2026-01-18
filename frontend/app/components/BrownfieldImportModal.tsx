@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { api } from "../lib/api/client";
 
 interface BrownfieldImportModalProps {
   isOpen: boolean;
@@ -76,21 +77,7 @@ export default function BrownfieldImportModal({
   const pollStatus = useCallback(
     async (projId: string) => {
       try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(
-          `/api/projects/${projId}/import/status`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch status");
-        }
-
-        const statusData = await response.json();
+        const statusData = await api.getImportStatus(projId);
 
         setProgress({
           files: statusData.files_indexed || 0,
@@ -130,27 +117,13 @@ export default function BrownfieldImportModal({
     setError("");
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/projects/import", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          description,
-          repo_url: source === "git" ? repoUrl : undefined,
-          local_path: source === "local" ? localPath : undefined,
-        }),
+      const data = await api.importBrownfield({
+        name,
+        description,
+        repo_url: source === "git" ? repoUrl : undefined,
+        local_path: source === "local" ? localPath : undefined,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Import failed");
-      }
-
-      const data = await response.json();
       setWorkflowId(data.workflow_id);
       setProjectId(data.project_id);
 
