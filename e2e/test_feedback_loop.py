@@ -5,36 +5,67 @@ Tests that when QA-generated tests fail, the system regenerates them.
 """
 
 import time
+import random
+import string
 from playwright.sync_api import sync_playwright
+
+FRONTEND_URL = "http://localhost:3000"
+
+def random_string(length=6):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+def register_and_create_project(page):
+    """Register a new user and create a project to get to workspace."""
+    test_id = random_string()
+    email = f"feedback_test_{test_id}@example.com"
+    tenant = f"Feedback Test {test_id}"
+    project_name = f"Counter App {test_id}"
+
+    # Register
+    print("  → Registering user...")
+    page.goto(f"{FRONTEND_URL}/register")
+    page.wait_for_load_state("networkidle")
+    page.fill("input#tenantName", tenant)
+    page.fill("input#name", "Test User")
+    page.fill("input#email", email)
+    page.fill("input#password", "TestPassword123!")
+    page.fill("input#confirmPassword", "TestPassword123!")
+    page.click("button[type='submit']")
+    page.wait_for_url("**/dashboard**", timeout=15000)
+    print("  ✓ User registered")
+
+    # Create project
+    print("  → Creating project...")
+    page.click("button:has-text('New Project')")
+    page.wait_for_selector("input[placeholder*='TaskFlow']", timeout=5000)
+    page.fill("input[placeholder*='TaskFlow']", project_name)
+    page.fill("textarea[placeholder*='Describe']", "A counter app for testing feedback loop")
+    page.click("button:has-text('Create Project')")
+    page.wait_for_url("**/projects/**", timeout=15000)
+    print(f"  ✓ Project created: {project_name}")
+
+    return project_name
 
 def test_feedback_loop():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        print("📍 Navigating to frontend...")
-        page.goto("http://localhost:3000", timeout=60000)
-        page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(3000)  # Give time for React to hydrate
+        print("📍 Setting up test environment...")
+        project_name = register_and_create_project(page)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(2000)
 
         # Take initial screenshot
         page.screenshot(path="/tmp/feedback_loop_1_initial.png")
         print("📸 Screenshot: /tmp/feedback_loop_1_initial.png")
 
-        # Click "New Pod" button
-        print("🆕 Creating new pod...")
-        new_pod_btn = page.locator("button:has-text('New Pod')")
-        if new_pod_btn.count() > 0:
-            new_pod_btn.click()
-            page.wait_for_timeout(2000)
-
-        page.screenshot(path="/tmp/feedback_loop_2_new_pod.png")
-        print("📸 Screenshot: /tmp/feedback_loop_2_new_pod.png")
-
         # Find the chat input and send a message describing a simple app
         print("💬 Sending app description...")
-        chat_input = page.locator("input[placeholder*='Describe your app']")
-        chat_input.wait_for(timeout=10000)
+        chat_input = page.locator("input[name='message']")
+        if chat_input.count() == 0:
+            chat_input = page.locator("input").first
+
         chat_input.fill("Create a simple React counter app with increment and decrement buttons. The counter should start at 0 and display the current count prominently.")
 
         # Click send button
@@ -44,12 +75,14 @@ def test_feedback_loop():
         print("⏳ Waiting for PM response...")
         page.wait_for_timeout(10000)  # Wait for LLM response
 
-        page.screenshot(path="/tmp/feedback_loop_3_after_message.png")
-        print("📸 Screenshot: /tmp/feedback_loop_3_after_message.png")
+        page.screenshot(path="/tmp/feedback_loop_2_after_message.png")
+        print("📸 Screenshot: /tmp/feedback_loop_2_after_message.png")
 
         # Send /approve to trigger code generation
         print("✅ Sending /approve to generate code...")
-        chat_input = page.locator("input[placeholder*='Describe your app']")
+        chat_input = page.locator("input[name='message']")
+        if chat_input.count() == 0:
+            chat_input = page.locator("input").first
         chat_input.fill("/approve")
         send_btn = page.locator("button:has-text('Send')")
         send_btn.click()
@@ -73,14 +106,14 @@ def test_feedback_loop():
             # Check for phase indicator
             page_content = page.content()
 
-            if "REVIEW" in page_content:
-                print("🎯 Reached REVIEW phase - tests completed!")
+            if "TESTING" in page_content:
+                print("🧪 Reached TESTING phase!")
+            if "DEPLOYMENT" in page_content:
+                print("🚀 Reached DEPLOYMENT phase!")
                 break
-            elif "DONE" in page_content:
-                print("✅ Reached DONE phase!")
+            elif "COMPLETE" in page_content or "HANDOFF" in page_content:
+                print("✅ Workflow completed!")
                 break
-            elif "Running tests" in page_content or "test" in page_content.lower():
-                print(f"🧪 Tests running... (check {i*5}s)")
 
             # Check if code files appeared
             if i == 12:  # After 1 minute
@@ -91,7 +124,7 @@ def test_feedback_loop():
         print("📸 Final screenshot: /tmp/feedback_loop_final.png")
 
         # Switch to PREVIEW tab if available
-        preview_tab = page.locator("button:has-text('PREVIEW')")
+        preview_tab = page.locator("button:has-text('PREVIEW')").first
         if preview_tab.count() > 0:
             preview_tab.click()
             page.wait_for_timeout(5000)

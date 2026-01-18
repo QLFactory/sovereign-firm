@@ -145,6 +145,7 @@ class AuthFlowTest:
 
         # Fill registration form
         page.fill("input#tenantName", self.test_tenant)
+        page.fill("input#name", "Test User")
         page.fill("input#email", self.test_email)
         page.fill("input#password", self.test_password)
         page.fill("input#confirmPassword", self.test_password)

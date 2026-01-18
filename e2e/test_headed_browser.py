@@ -3,6 +3,45 @@
 
 from playwright.sync_api import sync_playwright
 import time
+import random
+import string
+
+FRONTEND_URL = "http://localhost:3000"
+
+def random_string(length=6):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+def register_and_create_project(page):
+    """Register a new user and create a project to get to workspace."""
+    test_id = random_string()
+    email = f"headed_test_{test_id}@example.com"
+    tenant = f"Headed Test {test_id}"
+    project_name = f"Counter App {test_id}"
+
+    # Register
+    print("  → Registering user...")
+    page.goto(f"{FRONTEND_URL}/register")
+    page.wait_for_load_state("networkidle")
+    page.fill("input#tenantName", tenant)
+    page.fill("input#name", "Test User")
+    page.fill("input#email", email)
+    page.fill("input#password", "TestPassword123!")
+    page.fill("input#confirmPassword", "TestPassword123!")
+    page.click("button[type='submit']")
+    page.wait_for_url("**/dashboard**", timeout=15000)
+    print("  ✓ User registered")
+
+    # Create project
+    print("  → Creating project...")
+    page.click("button:has-text('New Project')")
+    page.wait_for_selector("input[placeholder*='TaskFlow']", timeout=5000)
+    page.fill("input[placeholder*='TaskFlow']", project_name)
+    page.fill("textarea[placeholder*='Describe']", "A counter app for headed browser testing")
+    page.click("button:has-text('Create Project')")
+    page.wait_for_url("**/projects/**", timeout=15000)
+    print(f"  ✓ Project created: {project_name}")
+
+    return project_name
 
 def main():
     with sync_playwright() as p:
@@ -17,46 +56,43 @@ def main():
         print("HEADED BROWSER TEST - Watch the browser window!")
         print("=" * 60)
 
-        print("\n1. Opening application...")
-        page.goto('http://localhost:3000')
-        time.sleep(3)
-
-        # Start fresh
-        print("\n2. Starting new pod...")
-        try:
-            new_pod = page.locator('button:has-text("New Pod")').first
-            new_pod.click()
-            time.sleep(2)
-        except:
-            pass
+        print("\n1. Setting up user and project...")
+        project_name = register_and_create_project(page)
+        time.sleep(2)
 
         # Send project request
-        print("\n3. Sending project request...")
-        input_field = page.locator('input[placeholder*="Describe"]').first
-        input_field.fill("Build a simple counter app with + and - buttons using React")
-        page.locator('button:has-text("Send")').first.click()
+        print("\n2. Sending project request...")
+        chat_input = page.locator("input[name='message']")
+        if chat_input.count() == 0:
+            chat_input = page.locator("input").first
+        chat_input.fill("Build a simple counter app with + and - buttons using React")
+        page.locator("button:has-text('Send')").first.click()
         time.sleep(5)
 
         # Answer questions
-        print("\n4. Answering PM questions...")
-        input_field = page.locator('input').first
-        input_field.fill("Start at 0, allow negatives, simple styling is fine")
-        page.locator('button:has-text("Send")').first.click()
+        print("\n3. Answering PM questions...")
+        chat_input = page.locator("input[name='message']")
+        if chat_input.count() == 0:
+            chat_input = page.locator("input").first
+        chat_input.fill("Start at 0, allow negatives, simple styling is fine")
+        page.locator("button:has-text('Send')").first.click()
         time.sleep(3)
 
         # Approve
-        print("\n5. Approving spec...")
-        input_field = page.locator('input').first
-        input_field.fill("/approve")
-        page.locator('button:has-text("Send")').first.click()
+        print("\n4. Approving spec...")
+        chat_input = page.locator("input[name='message']")
+        if chat_input.count() == 0:
+            chat_input = page.locator("input").first
+        chat_input.fill("/approve")
+        page.locator("button:has-text('Send')").first.click()
         time.sleep(2)
 
         # Wait for implementation
-        print("\n6. Waiting for code generation...")
+        print("\n5. Waiting for code generation...")
         for i in range(30):
             time.sleep(2)
             try:
-                files_btn = page.locator('button:has-text("FILES")').first
+                files_btn = page.locator("button:has-text('FILES')").first
                 text = files_btn.text_content()
                 if any(c.isdigit() and c != '0' for c in text):
                     print(f"   ✓ Files generated!")
@@ -67,13 +103,13 @@ def main():
                 print(f"   Waiting... ({i*2}s)")
 
         # Go to PREVIEW
-        print("\n7. Opening PREVIEW tab...")
-        preview_tab = page.locator('button:has-text("PREVIEW")').first
+        print("\n6. Opening PREVIEW tab...")
+        preview_tab = page.locator("button:has-text('PREVIEW')").first
         preview_tab.click()
         time.sleep(3)
 
         # Wait for WebContainer to load
-        print("\n8. Waiting for WebContainer (watch the browser!)...")
+        print("\n7. Waiting for WebContainer (watch the browser!)...")
         print("   The counter app should appear in the preview panel...")
 
         for i in range(45):
@@ -97,14 +133,14 @@ def main():
                 print(f"   Still loading... ({i*2}s)")
 
         # Try clicking buttons
-        print("\n9. Testing counter buttons...")
+        print("\n8. Testing counter buttons...")
         time.sleep(2)
 
         try:
             frames = page.frames
             for frame in frames:
                 try:
-                    plus_btn = frame.locator('button:has-text("+")').first
+                    plus_btn = frame.locator("button:has-text('+')").first
                     if plus_btn.is_visible(timeout=2000):
                         print("   Clicking + button...")
                         plus_btn.click()
@@ -112,7 +148,7 @@ def main():
                         plus_btn.click()
                         time.sleep(1)
 
-                        minus_btn = frame.locator('button:has-text("-")').first
+                        minus_btn = frame.locator("button:has-text('-')").first
                         print("   Clicking - button...")
                         minus_btn.click()
                         time.sleep(1)
@@ -125,7 +161,7 @@ def main():
             print(f"   Note: {e}")
 
         # Take screenshot
-        print("\n10. Taking screenshot...")
+        print("\n9. Taking screenshot...")
         page.screenshot(path='/tmp/headed_test.png', full_page=True)
 
         print("\n" + "=" * 60)
