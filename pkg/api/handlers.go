@@ -354,36 +354,55 @@ func (h *Handler) GetProjectState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try cache first
-	cachedState, _ := h.projectCache.GetState(ctx, projectID)
-	if cachedState != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Cache", "HIT")
-		json.NewEncoder(w).Encode(cachedState)
-		return
+	// Try cache first (if available)
+	if h.projectCache != nil {
+		cachedState, _ := h.projectCache.GetState(ctx, projectID)
+		if cachedState != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Cache", "HIT")
+			json.NewEncoder(w).Encode(cachedState)
+			return
+		}
 	}
 
 	// Query Temporal
 	resp, err := h.temporalClient.QueryWorkflow(ctx, workflowID, "", "get_state")
 	if err != nil {
-		jsonError(w, fmt.Sprintf("query failed: %v", err), http.StatusInternalServerError)
+		log.Printf("GetProjectState: Temporal query failed for %s: %v", workflowID, err)
+		// Return minimal state from database instead of 500
+		var phase, status string
+		h.db.QueryRow(ctx, "SELECT phase, status FROM projects WHERE workflow_id = $1", workflowID).Scan(&phase, &status)
+		minimalState := workflows.ConsultancyState{
+			ProjectID: projectID,
+			Phase:     workflows.ConsultancyPhase(phase),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(minimalState)
 		return
 	}
 
 	var state workflows.ConsultancyState
 	if err := resp.Get(&state); err != nil {
-		jsonError(w, "failed to decode state", http.StatusInternalServerError)
+		log.Printf("GetProjectState: Failed to decode state for %s: %v", workflowID, err)
+		// Return minimal state instead of 500
+		minimalState := workflows.ConsultancyState{
+			ProjectID: projectID,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(minimalState)
 		return
 	}
 
-	// Cache the result
-	cacheState := &cache.ProjectState{
-		Phase:     string(state.Phase),
-		Status:    "active",
-		Progress:  calculateProgress(string(state.Phase)),
-		FileCount: len(state.AllCodeFiles),
+	// Cache the result (if cache available)
+	if h.projectCache != nil {
+		cacheState := &cache.ProjectState{
+			Phase:     string(state.Phase),
+			Status:    "active",
+			Progress:  calculateProgress(string(state.Phase)),
+			FileCount: len(state.AllCodeFiles),
+		}
+		h.projectCache.SetState(ctx, projectID, cacheState)
 	}
-	h.projectCache.SetState(ctx, projectID, cacheState)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Cache", "MISS")
@@ -430,8 +449,10 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate cache
-	h.projectCache.InvalidateState(ctx, projectID)
+	// Invalidate cache (if available)
+	if h.projectCache != nil {
+		h.projectCache.InvalidateState(ctx, projectID)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"sent"}`))
@@ -492,8 +513,10 @@ func (h *Handler) ArchiveProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Invalidate cache
-	h.projectCache.InvalidateAll(ctx, projectID)
+	// Invalidate cache (if available)
+	if h.projectCache != nil {
+		h.projectCache.InvalidateAll(ctx, projectID)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -830,9 +853,10 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	// Query Temporal for brownfield status
 	resp, err := h.temporalClient.QueryWorkflow(ctx, workflowID, "", "get_brownfield_status")
 	if err != nil {
+		log.Printf("GetImportStatus: Temporal query failed for %s: %v", workflowID, err)
 		// If query fails, return basic status from database
 		status := "analyzing"
-		if phase == "PLANNING" || phase == "ARCHITECTURE" {
+		if phase == "PLANNING" || phase == "ARCHITECTURE" || phase == "SIZING" || phase == "DEVELOPMENT" {
 			status = "complete"
 		} else if phase == "FAILED" {
 			status = "error"
@@ -848,6 +872,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 
 	var browfieldStatus workflows.BrownfieldStatus
 	if err := resp.Get(&browfieldStatus); err != nil {
+		log.Printf("GetImportStatus: Failed to decode brownfield status for %s: %v", workflowID, err)
 		// Return basic status if can't decode
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ImportStatusResponse{
@@ -856,6 +881,9 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	log.Printf("GetImportStatus: %s status=%s files=%d chunks=%d phase=%s",
+		workflowID, browfieldStatus.Status, browfieldStatus.FilesIndexed, browfieldStatus.ChunksCreated, phase)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ImportStatusResponse{

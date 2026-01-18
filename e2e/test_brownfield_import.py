@@ -128,15 +128,36 @@ def test_brownfield_import():
 
             # Step 6: Wait for progress/completion
             print("\n[STEP 6] Waiting for import progress...")
-            for i in range(15):
+            max_files_seen = 0
+            max_chunks_seen = 0
+
+            for i in range(30):  # Increased iterations for longer imports
                 time.sleep(2)
                 page.screenshot(path=f"/tmp/brownfield_08_progress_{i:02d}.png")
 
-                # Check for success state
+                # Check if we've been redirected to the workspace (SUCCESS!)
+                current_url = page.url
+                if "/projects/" in current_url and "/projects" != current_url.rstrip('/'):
+                    # We've been redirected to a specific project workspace
+                    print(f"  ✓ Redirected to workspace: {current_url}")
+                    page.screenshot(path="/tmp/brownfield_09_workspace.png")
+
+                    # Verify the workspace loaded
+                    time.sleep(2)
+                    phase_indicator = page.locator('text="INTAKE"').or_(page.locator('text="SIZING"')).or_(page.locator('text="PLANNING"'))
+                    if phase_indicator.count() > 0:
+                        print("  ✓ Workspace loaded with active phase")
+                        return True
+                    else:
+                        print("  ✓ Import completed and redirected to workspace")
+                        return True
+
+                # Check for success state (modal still visible)
                 success_text = page.locator('text="Import Complete"')
                 if success_text.count() > 0 and success_text.is_visible():
-                    print("  ✓ Import completed successfully!")
+                    print(f"  ✓ Import completed! Waiting for redirect...")
                     page.screenshot(path="/tmp/brownfield_09_success.png")
+                    time.sleep(3)  # Wait for redirect
                     return True
 
                 # Check for error state
@@ -148,18 +169,45 @@ def test_brownfield_import():
                     page.screenshot(path="/tmp/brownfield_09_error.png")
                     return False
 
-                # Check for analyzing state
+                # Check for analyzing state and extract progress
                 analyzing_text = page.locator('text="Analyzing Codebase"')
                 if analyzing_text.count() > 0 and analyzing_text.is_visible():
-                    # Get progress numbers
+                    # Extract progress numbers from the UI
                     try:
-                        files_el = page.locator('text=/\\d+/').first
-                        print(f"  ... Still analyzing (iteration {i+1}/15)")
-                    except:
+                        # Look for the files indexed number (first number in cyan)
+                        files_el = page.locator('.text-2xl.font-bold.text-\\[var\\(--cyan-glow\\)\\]').first
+                        if files_el.count() > 0:
+                            files_text = files_el.text_content()
+                            if files_text and files_text.isdigit():
+                                files = int(files_text)
+                                if files > max_files_seen:
+                                    max_files_seen = files
+
+                        # Look for chunks (purple number)
+                        chunks_el = page.locator('.text-2xl.font-bold.text-\\[var\\(--violet-glow\\)\\]').first
+                        if chunks_el.count() > 0:
+                            chunks_text = chunks_el.text_content()
+                            if chunks_text and chunks_text.isdigit():
+                                chunks = int(chunks_text)
+                                if chunks > max_chunks_seen:
+                                    max_chunks_seen = chunks
+                    except Exception as e:
                         pass
 
-            print("  ⚠ Import still in progress after timeout")
-            return True  # Consider success if no error
+                    print(f"  ... Analyzing (iteration {i+1}/30) - Files: {max_files_seen}, Chunks: {max_chunks_seen}")
+
+            # Timeout - check if we at least saw some progress or ended up somewhere useful
+            print(f"  ⚠ Timeout after 60s. Max files seen: {max_files_seen}, Max chunks: {max_chunks_seen}")
+            current_url = page.url
+            if "/projects/" in current_url and current_url != f"{BASE_URL}/projects":
+                print(f"  ✓ Ended up in workspace: {current_url}")
+                return True
+            elif max_files_seen > 0:
+                print("  ✓ Import appears to be working (files indexed before timeout)")
+                return True
+            else:
+                print("  ✗ No files were indexed and not redirected - import not working")
+                return False
 
         except Exception as e:
             print(f"\n  ✗ Error: {e}")

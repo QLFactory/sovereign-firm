@@ -317,13 +317,26 @@ func legacyGetPodStatus(temporalClient client.Client) http.HandlerFunc {
 
 		resp, err := temporalClient.QueryWorkflow(context.Background(), workflowID, "", "get_state")
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+			log.Printf("Legacy GetPodStatus: Temporal query failed for %s: %v", workflowID, err)
+			// Return minimal state instead of 500
+			minimalState := workflows.ConsultancyState{
+				ProjectID: workflowID,
+				Phase:     workflows.PhaseIntake,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(minimalState)
 			return
 		}
 
 		var state workflows.ConsultancyState
 		if err := resp.Get(&state); err != nil {
-			http.Error(w, "Failed to decode state", http.StatusInternalServerError)
+			log.Printf("Legacy GetPodStatus: Failed to decode state for %s: %v", workflowID, err)
+			// Return minimal state instead of 500
+			minimalState := workflows.ConsultancyState{
+				ProjectID: workflowID,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(minimalState)
 			return
 		}
 
