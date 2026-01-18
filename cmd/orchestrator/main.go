@@ -114,11 +114,17 @@ func main() {
 				r.Get("/", apiHandler.ListProjects)
 				r.Post("/", apiHandler.CreateProject)
 
+				// Brownfield import
+				r.Post("/import", apiHandler.ImportBrownfield)
+
 				r.Route("/{projectId}", func(r chi.Router) {
 					r.Get("/", apiHandler.GetProject)
 					r.Delete("/", apiHandler.ArchiveProject)
 					r.Get("/state", apiHandler.GetProjectState)
 					r.Post("/message", apiHandler.SendMessage)
+
+					// Import status
+					r.Get("/import/status", apiHandler.GetImportStatus)
 
 					// Artifacts
 					r.Get("/artifacts", apiHandler.ListArtifacts)

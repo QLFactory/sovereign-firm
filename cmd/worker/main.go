@@ -185,6 +185,16 @@ func main() {
 	projectAgent := activities.NewProjectAgent(dbPool)
 	w.RegisterActivityWithOptions(projectAgent.UpdatePhase, activity.RegisterOptions{Name: "ProjectUpdatePhase"})
 
+	// Brownfield Analyzer - Codebase Analysis for Existing Projects
+	chromaURL := os.Getenv("CHROMA_URL")
+	if chromaURL == "" {
+		chromaURL = "http://localhost:8000"
+	}
+	brownfieldAnalyzer := activities.NewBrownfieldAnalyzer(chromaURL)
+	w.RegisterActivityWithOptions(brownfieldAnalyzer.AnalyzeProject, activity.RegisterOptions{Name: "BrownfieldAnalyzeProject"})
+	w.RegisterActivityWithOptions(brownfieldAnalyzer.QuickAnalyze, activity.RegisterOptions{Name: "BrownfieldQuickAnalyze"})
+	log.Println("✅ Registered Brownfield Analyzer activities")
+
 	log.Println("Worker started...")
 	err = w.Run(worker.InterruptCh())
 	if err != nil {

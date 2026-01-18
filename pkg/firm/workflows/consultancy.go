@@ -57,6 +57,24 @@ const (
 	PhaseFailed        ConsultancyPhase = "FAILED"
 )
 
+// BrownfieldConfig contains configuration for brownfield import
+type BrownfieldConfig struct {
+	RepoURL      string   `json:"repo_url,omitempty"`      // Git repository URL to clone
+	LocalPath    string   `json:"local_path,omitempty"`    // Local directory path
+	MaxFiles     int      `json:"max_files,omitempty"`     // Maximum files to index (0 = unlimited)
+	SkipPatterns []string `json:"skip_patterns,omitempty"` // Glob patterns to skip
+	IncludeTests bool     `json:"include_tests,omitempty"` // Include test files in analysis
+}
+
+// BrownfieldStatus represents the status of a brownfield import operation
+type BrownfieldStatus struct {
+	Status        string `json:"status"` // "analyzing", "complete", "error"
+	FilesIndexed  int    `json:"files_indexed"`
+	ChunksCreated int    `json:"chunks_created"`
+	SymbolsFound  int    `json:"symbols_found"`
+	Error         string `json:"error,omitempty"`
+}
+
 // ConsultancyConfig contains configuration for the consultancy workflow
 type ConsultancyConfig struct {
 	// Project settings
@@ -76,6 +94,9 @@ type ConsultancyConfig struct {
 	// Limits
 	MaxCodeAttempts int `json:"max_code_attempts"` // Default 3
 	MaxTestAttempts int `json:"max_test_attempts"` // Default 3
+
+	// Brownfield import (optional)
+	BrownfieldConfig *BrownfieldConfig `json:"brownfield_config,omitempty"`
 }
 
 // ConsultancyState holds the complete state of a consultancy project
@@ -140,6 +161,9 @@ type ConsultancyState struct {
 	Warnings      []string `json:"warnings"`
 	PhaseHistory  []string `json:"phase_history"`
 	CompletedAt   *time.Time `json:"completed_at"`
+
+	// Brownfield import status
+	BrownfieldStatus *BrownfieldStatus `json:"brownfield_status,omitempty"`
 }
 
 // ConsultancyWorkflow is the main workflow for end-to-end project delivery
@@ -181,7 +205,7 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 	ctxMedium := workflow.WithActivityOptions(ctx, mediumAO)
 	ctxLong := workflow.WithActivityOptions(ctx, longAO)
 
-	// Register query handler
+	// Register query handler for full state
 	err := workflow.SetQueryHandler(ctx, "get_state", func() (*ConsultancyState, error) {
 		return state, nil
 	})
@@ -189,8 +213,112 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		return nil, err
 	}
 
+	// Register query handler for brownfield status
+	err = workflow.SetQueryHandler(ctx, "get_brownfield_status", func() (*BrownfieldStatus, error) {
+		if state.BrownfieldStatus != nil {
+			return state.BrownfieldStatus, nil
+		}
+		return &BrownfieldStatus{Status: "not_started"}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	// Signal channel for user messages
 	msgChan := workflow.GetSignalChannel(ctx, "USER_MESSAGE")
+
+	// ============================================================
+	// BROWNFIELD ANALYSIS (if configured)
+	// ============================================================
+	if config.BrownfieldConfig != nil && (config.BrownfieldConfig.RepoURL != "" || config.BrownfieldConfig.LocalPath != "") {
+		logger.Info("Starting brownfield analysis")
+
+		// Initialize brownfield status
+		state.BrownfieldStatus = &BrownfieldStatus{Status: "analyzing"}
+
+		// Prepare brownfield params
+		brownfieldInput := map[string]interface{}{
+			"project_id": state.ProjectID,
+			"client_id":  state.ClientID,
+		}
+		if config.BrownfieldConfig.RepoURL != "" {
+			brownfieldInput["repo_url"] = config.BrownfieldConfig.RepoURL
+		}
+		if config.BrownfieldConfig.LocalPath != "" {
+			brownfieldInput["local_path"] = config.BrownfieldConfig.LocalPath
+		}
+		if config.BrownfieldConfig.MaxFiles > 0 {
+			brownfieldInput["max_files"] = config.BrownfieldConfig.MaxFiles
+		}
+		if len(config.BrownfieldConfig.SkipPatterns) > 0 {
+			brownfieldInput["skip_patterns"] = config.BrownfieldConfig.SkipPatterns
+		}
+		brownfieldInput["include_tests"] = config.BrownfieldConfig.IncludeTests
+
+		// Execute brownfield analysis activity
+		var brownfieldResult map[string]interface{}
+		if err := workflow.ExecuteActivity(ctxLong, "BrownfieldAnalyzeProject", brownfieldInput).Get(ctx, &brownfieldResult); err != nil {
+			logger.Error("Brownfield analysis failed", "Error", err)
+			state.BrownfieldStatus = &BrownfieldStatus{
+				Status: "error",
+				Error:  err.Error(),
+			}
+			state.Errors = append(state.Errors, fmt.Sprintf("Brownfield analysis: %v", err))
+		} else {
+			// Update brownfield status from result
+			filesIndexed := 0
+			if v, ok := brownfieldResult["files_indexed"].(float64); ok {
+				filesIndexed = int(v)
+			} else if v, ok := brownfieldResult["files_indexed"].(int); ok {
+				filesIndexed = v
+			}
+			chunksCreated := 0
+			if v, ok := brownfieldResult["chunks_created"].(float64); ok {
+				chunksCreated = int(v)
+			} else if v, ok := brownfieldResult["chunks_created"].(int); ok {
+				chunksCreated = v
+			}
+			symbolsFound := 0
+			if v, ok := brownfieldResult["symbols_found"].(float64); ok {
+				symbolsFound = int(v)
+			} else if v, ok := brownfieldResult["symbols_found"].(int); ok {
+				symbolsFound = v
+			}
+
+			state.BrownfieldStatus = &BrownfieldStatus{
+				Status:        "complete",
+				FilesIndexed:  filesIndexed,
+				ChunksCreated: chunksCreated,
+				SymbolsFound:  symbolsFound,
+			}
+
+			// Extract tech stack from analysis if available
+			if stack, ok := brownfieldResult["stack"].(map[string]interface{}); ok {
+				if state.TechStack == nil {
+					state.TechStack = make(map[string]interface{})
+				}
+				for k, v := range stack {
+					state.TechStack[k] = v
+				}
+			}
+
+			// Store recommendations
+			if recommendations, ok := brownfieldResult["recommendations"].([]interface{}); ok {
+				for _, rec := range recommendations {
+					if r, ok := rec.(string); ok {
+						state.Warnings = append(state.Warnings, r)
+					}
+				}
+			}
+
+			logger.Info("Brownfield analysis completed",
+				"FilesIndexed", filesIndexed,
+				"ChunksCreated", chunksCreated,
+				"SymbolsFound", symbolsFound)
+		}
+
+		state.UpdatedAt = workflow.Now(ctx)
+	}
 
 	// ============================================================
 	// PHASE 1: INTAKE (Discovery)

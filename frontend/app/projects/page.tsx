@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAppStore } from "../lib/store";
 import { PHASE_COLORS, getPhaseProgress } from "../lib/api/types";
 import type { Project, ProjectConfig, Phase } from "../lib/api/types";
+import BrownfieldImportModal from "../components/BrownfieldImportModal";
 
 // Project Card Component
 function ProjectCard({ project }: { project: Project }) {
@@ -457,6 +458,9 @@ export default function ProjectsPage() {
   const setCreateModalOpen = useAppStore((state) => state.setCreateModalOpen);
   const createProject = useAppStore((state) => state.createProject);
 
+  // Brownfield import modal state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
   // Stats
   const totalProjects = projects.length;
   const activeProjects = projects.filter(
@@ -504,6 +508,22 @@ export default function ProjectsPage() {
             <Link href="/dashboard" className="btn btn-ghost text-sm">
               Dashboard
             </Link>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="btn btn-secondary text-sm"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Import Existing
+            </button>
             <button
               onClick={() => setCreateModalOpen(true)}
               className="btn btn-primary text-sm"
@@ -582,6 +602,15 @@ export default function ProjectsPage() {
         onClose={() => setCreateModalOpen(false)}
         onSubmit={handleCreateProject}
         isLoading={isCreating}
+      />
+
+      {/* Brownfield Import Modal */}
+      <BrownfieldImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={(projectId) => {
+          router.push(`/projects/${projectId}`);
+        }}
       />
     </div>
   );

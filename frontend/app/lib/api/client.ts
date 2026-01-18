@@ -321,6 +321,49 @@ class ApiClient {
   }
 
   // ==========================================================================
+  // Brownfield Import
+  // ==========================================================================
+
+  /**
+   * Import an existing project (brownfield import)
+   */
+  async importBrownfield(params: {
+    name: string;
+    description?: string;
+    repo_url?: string;
+    local_path?: string;
+  }): Promise<{ workflow_id: string; project_id: string; status: string }> {
+    return this.request<{ workflow_id: string; project_id: string; status: string }>(
+      "/projects/import",
+      {
+        method: "POST",
+        body: JSON.stringify(params),
+      }
+    );
+  }
+
+  /**
+   * Get the status of a brownfield import
+   */
+  async getImportStatus(projectId: string): Promise<{
+    status: "analyzing" | "complete" | "error";
+    files_indexed?: number;
+    chunks_created?: number;
+    symbols_found?: number;
+    error?: string;
+    phase?: string;
+  }> {
+    return this.request<{
+      status: "analyzing" | "complete" | "error";
+      files_indexed?: number;
+      chunks_created?: number;
+      symbols_found?: number;
+      error?: string;
+      phase?: string;
+    }>(`/projects/${projectId}/import/status`);
+  }
+
+  // ==========================================================================
   // Utilities
   // ==========================================================================
 

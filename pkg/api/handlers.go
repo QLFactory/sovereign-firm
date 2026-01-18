@@ -650,3 +650,220 @@ func calculateProgress(phase string) int {
 	}
 	return 0
 }
+
+// =========================================================================
+// Brownfield Import Handlers
+// =========================================================================
+
+// ImportBrownfieldRequest represents a request to import an existing project
+type ImportBrownfieldRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	RepoURL     string `json:"repo_url,omitempty"`
+	LocalPath   string `json:"local_path,omitempty"`
+}
+
+// ImportBrownfieldResponse represents the response from starting a brownfield import
+type ImportBrownfieldResponse struct {
+	WorkflowID string `json:"workflow_id"`
+	ProjectID  string `json:"project_id"`
+	Status     string `json:"status"`
+}
+
+// ImportStatusResponse represents the status of a brownfield import
+type ImportStatusResponse struct {
+	Status       string `json:"status"` // "analyzing", "complete", "error"
+	FilesIndexed int    `json:"files_indexed,omitempty"`
+	ChunksCreated int   `json:"chunks_created,omitempty"`
+	SymbolsFound int    `json:"symbols_found,omitempty"`
+	Error        string `json:"error,omitempty"`
+	Phase        string `json:"phase,omitempty"`
+}
+
+// ImportBrownfield starts a brownfield import workflow
+func (h *Handler) ImportBrownfield(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := auth.GetTenantID(ctx)
+	userID := auth.GetUserID(ctx)
+	if tenantID == "" || userID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req ImportBrownfieldRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if req.Name == "" {
+		jsonError(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if req.RepoURL == "" && req.LocalPath == "" {
+		jsonError(w, "either repo_url or local_path is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate Git URL format if provided
+	if req.RepoURL != "" {
+		if !strings.HasPrefix(req.RepoURL, "http://") &&
+			!strings.HasPrefix(req.RepoURL, "https://") &&
+			!strings.HasPrefix(req.RepoURL, "git@") {
+			jsonError(w, "invalid repository URL format", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Generate workflow ID
+	workflowID := fmt.Sprintf("brownfield_%s_%d", strings.ReplaceAll(req.Name, " ", "_"), time.Now().Unix())
+
+	// Create workflow config with brownfield settings
+	config := workflows.ConsultancyConfig{
+		ProjectName:     req.Name,
+		ClientID:        tenantID,
+		InitialMessage:  fmt.Sprintf("Importing existing project: %s", req.Description),
+		MaxCodeAttempts: 3,
+		MaxTestAttempts: 3,
+		// Brownfield-specific config
+		BrownfieldConfig: &workflows.BrownfieldConfig{
+			RepoURL:   req.RepoURL,
+			LocalPath: req.LocalPath,
+		},
+	}
+
+	// Serialize config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		jsonError(w, "failed to serialize config", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if DB is available
+	if h.db == nil {
+		jsonError(w, "database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Start transaction
+	tx, err := h.db.Begin(ctx)
+	if err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	// Insert project into database with brownfield type
+	var projectID string
+	err = tx.QueryRow(ctx,
+		`INSERT INTO projects (tenant_id, workflow_id, name, description, config, created_by, phase)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'ANALYZING')
+		 RETURNING id`,
+		tenantID, workflowID, req.Name, req.Description, configJSON, userID,
+	).Scan(&projectID)
+	if err != nil {
+		log.Printf("ImportBrownfield: insert error: %v", err)
+		jsonError(w, "failed to create project", http.StatusInternalServerError)
+		return
+	}
+
+	// Start Temporal workflow
+	workflowOptions := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "sovereign-firm-tasks",
+	}
+
+	_, err = h.temporalClient.ExecuteWorkflow(ctx, workflowOptions, workflows.ConsultancyWorkflow, config)
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to start workflow: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		jsonError(w, "failed to commit", http.StatusInternalServerError)
+		return
+	}
+
+	// Broadcast phase change
+	h.streamHub.BroadcastPhaseChange(workflowID, "", "ANALYZING", "Brownfield import started")
+
+	log.Printf("Started brownfield import for project %s with workflow %s", projectID, workflowID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(ImportBrownfieldResponse{
+		WorkflowID: workflowID,
+		ProjectID:  projectID,
+		Status:     "analyzing",
+	})
+}
+
+// GetImportStatus returns the status of a brownfield import
+func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := auth.GetTenantID(ctx)
+	projectID := chi.URLParam(r, "projectId")
+
+	if tenantID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if DB is available
+	if h.db == nil {
+		jsonError(w, "database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Get workflow ID from database
+	var workflowID, phase string
+	err := h.db.QueryRow(ctx,
+		"SELECT workflow_id, phase FROM projects WHERE id = $1 AND tenant_id = $2",
+		projectID, tenantID,
+	).Scan(&workflowID, &phase)
+	if err != nil {
+		jsonError(w, "project not found", http.StatusNotFound)
+		return
+	}
+
+	// Query Temporal for brownfield status
+	resp, err := h.temporalClient.QueryWorkflow(ctx, workflowID, "", "get_brownfield_status")
+	if err != nil {
+		// If query fails, return basic status from database
+		status := "analyzing"
+		if phase == "PLANNING" || phase == "ARCHITECTURE" {
+			status = "complete"
+		} else if phase == "FAILED" {
+			status = "error"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ImportStatusResponse{
+			Status: status,
+			Phase:  phase,
+		})
+		return
+	}
+
+	var browfieldStatus workflows.BrownfieldStatus
+	if err := resp.Get(&browfieldStatus); err != nil {
+		// Return basic status if can't decode
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ImportStatusResponse{
+			Status: "analyzing",
+			Phase:  phase,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ImportStatusResponse{
+		Status:        browfieldStatus.Status,
+		FilesIndexed:  browfieldStatus.FilesIndexed,
+		ChunksCreated: browfieldStatus.ChunksCreated,
+		SymbolsFound:  browfieldStatus.SymbolsFound,
+		Error:         browfieldStatus.Error,
+		Phase:         phase,
+	})
+}
