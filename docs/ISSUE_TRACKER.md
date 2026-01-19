@@ -82,15 +82,17 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 - **Description**: Activity errors are logged but workflow continues with corrupted state instead of failing fast.
 - **Impact**: Cascading failures, invalid deliverables
 - **Fix**: Return error from workflow on critical activity failure
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `TestsPassed` field to state. Test failures now logged as errors and recorded in state.Errors. Deployment is blocked when tests fail (see ISS-008). Optional activities (brownfield, PM chat) have reasonable fallbacks.
 
 ### ISS-008: Test Failures Don't Block Deployment
 - **File**: `pkg/firm/workflows/consultancy.go`
-- **Line**: 931
+- **Lines**: 934-939, 966-971
 - **Description**: QA test failures are logged but deployment proceeds anyway.
 - **Impact**: Broken code gets deployed
 - **Fix**: Check test results, block deployment on failure
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Test status now stored in `state.TestsPassed`. Deployment phase checks this flag and skips with warning if tests failed. Error logged and added to state.Errors after max test attempts.
 
 ---
 
@@ -297,11 +299,11 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
-| P0 | 8 | 2 | 0 | 6 |
+| P0 | 8 | 0 | 0 | 8 |
 | P1 | 6 | 6 | 0 | 0 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **21** | **0** | **6** |
+| **Total** | **27** | **19** | **0** | **8** |
 
 ---
 

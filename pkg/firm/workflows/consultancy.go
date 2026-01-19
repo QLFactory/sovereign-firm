@@ -161,6 +161,7 @@ type ConsultancyState struct {
 	ValidationResults map[string]interface{} `json:"validation_results"`
 	CriticReview      map[string]interface{} `json:"critic_review"`
 	TestResults       map[string]interface{} `json:"test_results"`
+	TestsPassed       bool                   `json:"tests_passed"`
 
 	// Status tracking
 	Errors       []string   `json:"errors"`
@@ -930,6 +931,13 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 		}
 	}
 
+	// Record test status in state
+	state.TestsPassed = testsPassed
+	if !testsPassed {
+		logger.Error("Tests failed after all attempts", "MaxAttempts", config.MaxTestAttempts)
+		state.Errors = append(state.Errors, fmt.Sprintf("Tests failed after %d attempts", config.MaxTestAttempts))
+	}
+
 	// Analyze test coverage
 	coverageInput := map[string]interface{}{
 		"code_files":        filterNonTestFiles(state.AllCodeFiles),
@@ -955,7 +963,10 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 	// ============================================================
 	// PHASE 7: DEPLOYMENT (DevOps Artifacts)
 	// ============================================================
-	if config.EnableDeployment {
+	if config.EnableDeployment && !state.TestsPassed {
+		logger.Warn("Skipping DEPLOYMENT phase - tests did not pass")
+		state.Warnings = append(state.Warnings, "Deployment skipped: tests did not pass")
+	} else if config.EnableDeployment {
 		transitionPhaseWithDB(ctx, state, PhaseDeployment)
 		logger.Info("Starting DEPLOYMENT phase")
 
