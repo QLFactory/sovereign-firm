@@ -12,40 +12,40 @@ import (
 type Framework string
 
 const (
-	FrameworkReact     Framework = "react"
-	FrameworkNextJS    Framework = "nextjs"
-	FrameworkVue       Framework = "vue"
-	FrameworkAngular   Framework = "angular"
-	FrameworkExpress   Framework = "express"
-	FrameworkFastify   Framework = "fastify"
-	FrameworkGin       Framework = "gin"
-	FrameworkEcho      Framework = "echo"
-	FrameworkFiber     Framework = "fiber"
-	FrameworkDjango    Framework = "django"
-	FrameworkFlask     Framework = "flask"
-	FrameworkFastAPI   Framework = "fastapi"
-	FrameworkRust      Framework = "rust"
-	FrameworkTailwind  Framework = "tailwindcss"
-	FrameworkVite      Framework = "vite"
-	FrameworkWebpack   Framework = "webpack"
-	FrameworkVitest    Framework = "vitest"
-	FrameworkJest      Framework = "jest"
-	FrameworkUnknown   Framework = "unknown"
+	FrameworkReact    Framework = "react"
+	FrameworkNextJS   Framework = "nextjs"
+	FrameworkVue      Framework = "vue"
+	FrameworkAngular  Framework = "angular"
+	FrameworkExpress  Framework = "express"
+	FrameworkFastify  Framework = "fastify"
+	FrameworkGin      Framework = "gin"
+	FrameworkEcho     Framework = "echo"
+	FrameworkFiber    Framework = "fiber"
+	FrameworkDjango   Framework = "django"
+	FrameworkFlask    Framework = "flask"
+	FrameworkFastAPI  Framework = "fastapi"
+	FrameworkRust     Framework = "rust"
+	FrameworkTailwind Framework = "tailwindcss"
+	FrameworkVite     Framework = "vite"
+	FrameworkWebpack  Framework = "webpack"
+	FrameworkVitest   Framework = "vitest"
+	FrameworkJest     Framework = "jest"
+	FrameworkUnknown  Framework = "unknown"
 )
 
 // ProjectStack represents the detected technology stack of a project
 type ProjectStack struct {
-	PrimaryLanguage  Language    `json:"primary_language"`
-	Languages        []Language  `json:"languages"`
-	Frameworks       []Framework `json:"frameworks"`
-	TestFrameworks   []Framework `json:"test_frameworks"`
-	BuildTools       []Framework `json:"build_tools"`
-	PackageManager   string      `json:"package_manager"`
-	HasTypeScript    bool        `json:"has_typescript"`
-	HasTests         bool        `json:"has_tests"`
-	IsMonorepo       bool        `json:"is_monorepo"`
-	EntryPoints      []string    `json:"entry_points"`
-	ConfigFiles      []string    `json:"config_files"`
+	PrimaryLanguage Language    `json:"primary_language"`
+	Languages       []Language  `json:"languages"`
+	Frameworks      []Framework `json:"frameworks"`
+	TestFrameworks  []Framework `json:"test_frameworks"`
+	BuildTools      []Framework `json:"build_tools"`
+	PackageManager  string      `json:"package_manager"`
+	HasTypeScript   bool        `json:"has_typescript"`
+	HasTests        bool        `json:"has_tests"`
+	IsMonorepo      bool        `json:"is_monorepo"`
+	EntryPoints     []string    `json:"entry_points"`
+	ConfigFiles     []string    `json:"config_files"`
 }
 
 // ProjectAnalyzer analyzes a project to detect its technology stack
@@ -405,11 +405,11 @@ func (a *ProjectAnalyzer) detectEntryPoints(projectDir string, stack *ProjectSta
 		"src/index.jsx",
 		"src/App.tsx",
 		"src/App.jsx",
-		"app/page.tsx",      // Next.js
-		"pages/index.tsx",   // Next.js pages router
+		"app/page.tsx",    // Next.js
+		"pages/index.tsx", // Next.js pages router
 		"main.py",
 		"app.py",
-		"manage.py",         // Django
+		"manage.py", // Django
 		"src/main.rs",
 		"src/lib.rs",
 	}
@@ -438,7 +438,7 @@ func (a *ProjectAnalyzer) AnalyzeFile(ctx context.Context, filePath string, sour
 		return nil, err
 	}
 
-	return ExtractSymbols(result)
+	return ExtractSymbols(a.parser, result)
 }
 
 // AnalyzeFiles analyzes multiple files and returns their combined structure
@@ -455,7 +455,7 @@ func (a *ProjectAnalyzer) AnalyzeFiles(ctx context.Context, files map[string]str
 			continue // Skip unparseable files
 		}
 
-		structure, err := ExtractSymbols(result)
+		structure, err := ExtractSymbols(a.parser, result)
 		if err != nil {
 			continue
 		}

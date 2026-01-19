@@ -143,3 +143,49 @@ func (c *ChromaClient) postJSON(ctx context.Context, path string, reqData interf
 	}
 	return nil
 }
+
+// DeleteByMetadata removes documents using Chroma's where clause filter
+func (c *ChromaClient) DeleteByMetadata(ctx context.Context, where map[string]interface{}) error {
+	collID, err := c.getOrCreateCollection(ctx)
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]interface{}{
+		"where": where,
+	}
+
+	return c.postJSON(ctx, "/api/v1/collections/"+collID+"/delete", payload, nil)
+}
+
+// GetDocumentsByMetadata retrieves raw documents matching metadata
+func (c *ChromaClient) GetDocumentsByMetadata(ctx context.Context, where map[string]interface{}) ([]Document, error) {
+	collID, err := c.getOrCreateCollection(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := map[string]interface{}{
+		"where": where,
+	}
+
+	var resp struct {
+		Ids       []string                 `json:"ids"`
+		Documents []string                 `json:"documents"`
+		Metadatas []map[string]interface{} `json:"metadatas"`
+	}
+
+	if err := c.postJSON(ctx, "/api/v1/collections/"+collID+"/get", payload, &resp); err != nil {
+		return nil, err
+	}
+
+	results := make([]Document, len(resp.Ids))
+	for i := range results {
+		results[i] = Document{
+			ID:       resp.Ids[i],
+			Content:  resp.Documents[i],
+			Metadata: resp.Metadatas[i],
+		}
+	}
+	return results, nil
+}

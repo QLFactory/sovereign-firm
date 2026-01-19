@@ -1,5 +1,5 @@
-/* Google Fonts - Must be first */
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Google Fonts - Outfit for body, Syne for display */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
@@ -9,33 +9,55 @@
    ============================================ */
 
 :root {
-  /* Core Palette - Obsidian & Light */
-  --void: #000000;
-  --obsidian: #050508;
-  --carbon: #0a0a0f;
-  --graphite: #12121a;
-  --slate: #1a1a24;
-  --steel: #2a2a38;
-  --silver: #8888a0;
-  --pearl: #c8c8d8;
-  --ivory: #f0f0f8;
+  /* Core Palette - HSL based for alchemy */
+  --void-h: 240; --void-s: 30%; --void-l: 0%;
+  --void: hsl(var(--void-h), var(--void-s), var(--void-l));
+
+  --obsidian-h: 240; --obsidian-s: 23%; --obsidian-l: 2%;
+  --obsidian: hsl(var(--obsidian-h), var(--obsidian-s), var(--obsidian-l));
+
+  --carbon-h: 240; --carbon-s: 20%; --carbon-l: 4%;
+  --carbon: hsl(var(--carbon-h), var(--carbon-s), var(--carbon-l));
+
+  --graphite-h: 240; --graphite-s: 18%; --graphite-l: 8%;
+  --graphite: hsl(var(--graphite-h), var(--graphite-s), var(--graphite-l));
+
+  --slate-h: 240; --slate-s: 16%; --slate-l: 12%;
+  --slate: hsl(var(--slate-h), var(--slate-s), var(--slate-l));
+
+  --steel-h: 240; --steel-s: 14%; --steel-l: 20%;
+  --steel: hsl(var(--steel-h), var(--steel-s), var(--steel-l));
+
+  --silver-h: 240; --silver-s: 12%; --silver-l: 58%;
+  --silver: hsl(var(--silver-h), var(--silver-s), var(--silver-l));
+
+  --pearl-h: 240; --pearl-s: 10%; --pearl-l: 82%;
+  --pearl: hsl(var(--pearl-h), var(--pearl-s), var(--pearl-l));
+
+  --ivory-h: 240; --ivory-s: 8%; --ivory-l: 96%;
+  --ivory: hsl(var(--ivory-h), var(--ivory-s), var(--ivory-l));
+
   --pure: #ffffff;
 
   /* Accent Palette - Energy & Alchemy */
-  --cyan-glow: #00f0ff;
-  --cyan-bright: #00d4e8;
-  --cyan-muted: #0099aa;
-  --cyan-deep: #006677;
+  --cyan-h: 184; --cyan-s: 100%; --cyan-l: 50%;
+  --cyan-glow: hsl(var(--cyan-h), var(--cyan-s), var(--cyan-l));
+  --cyan-bright: hsl(var(--cyan-h), var(--cyan-s), 45%);
+  --cyan-muted: hsl(var(--cyan-h), 70%, 35%);
 
-  --amber-glow: #ffb800;
-  --amber-bright: #f0a000;
-  --amber-muted: #c08000;
+  --amber-h: 43; --amber-s: 100%; --amber-l: 50%;
+  --amber-glow: hsl(var(--amber-h), var(--amber-s), var(--amber-l));
+  --amber-bright: hsl(var(--amber-h), var(--amber-s), 40%);
 
-  --violet-glow: #a855f7;
-  --violet-bright: #8b5cf6;
+  --violet-h: 270; --violet-s: 91%; --violet-l: 65%;
+  --violet-glow: hsl(var(--violet-h), var(--violet-s), var(--violet-l));
+  --violet-bright: hsl(var(--violet-h), var(--violet-s), 55%);
 
-  --emerald-glow: #10b981;
-  --rose-glow: #f43f5e;
+  --emerald-h: 160; --emerald-s: 84%; --emerald-l: 39%;
+  --emerald-glow: hsl(var(--emerald-h), var(--emerald-s), var(--emerald-l));
+
+  --rose-h: 350; --rose-s: 89%; --rose-l: 60%;
+  --rose-glow: hsl(var(--rose-h), var(--rose-s), var(--rose-l));
 
   /* Semantic Colors */
   --success: var(--emerald-glow);
@@ -44,13 +66,13 @@
   --info: var(--cyan-glow);
 
   /* Glass & Transparency */
-  --glass-bg: rgba(10, 10, 15, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-highlight: rgba(255, 255, 255, 0.05);
+  --glass-bg: hsla(240, 20%, 4%, 0.7);
+  --glass-border: hsla(0, 0%, 100%, 0.08);
+  --glass-highlight: hsla(0, 0%, 100%, 0.05);
 
   /* Typography */
   --font-display: 'Syne', system-ui, sans-serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-body: 'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Spacing Scale */
@@ -72,9 +94,9 @@
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-glow-cyan: 0 0 30px rgba(0, 240, 255, 0.3);
-  --shadow-glow-amber: 0 0 30px rgba(255, 184, 0, 0.3);
-  --shadow-glow-subtle: 0 0 60px rgba(0, 240, 255, 0.1);
+  --shadow-glow-cyan: 0 0 30px hsla(var(--cyan-h), var(--cyan-s), var(--cyan-l), 0.3);
+  --shadow-glow-amber: 0 0 30px hsla(var(--amber-h), var(--amber-s), var(--amber-l), 0.3);
+  --shadow-glow-subtle: 0 0 60px hsla(var(--cyan-h), var(--cyan-s), var(--cyan-l), 0.1);
   --shadow-elevated: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
 

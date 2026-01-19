@@ -1,22 +1,23 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/qlfactory/sovereign-firm/pkg/sandbox"
 )
 
 // ValidationStage1 performs instant syntax, type, and lint checks
 // This is Stage 1 of the Agent CI Pipeline (< 5 seconds)
-type Validator struct{}
+type Validator struct {
+	sandboxManager *sandbox.Manager
+}
 
-func NewValidator() *Validator {
-	return &Validator{}
+func NewValidator(mgr *sandbox.Manager) *Validator {
+	return &Validator{sandboxManager: mgr}
 }
 
 type ValidationInput struct {
@@ -24,13 +25,13 @@ type ValidationInput struct {
 }
 
 type ValidationResult struct {
-	Success       bool              `json:"success"`
-	Stage         string            `json:"stage"`
-	SyntaxErrors  []ValidationError `json:"syntax_errors,omitempty"`
-	TypeErrors    []ValidationError `json:"type_errors,omitempty"`
-	LintWarnings  []ValidationError `json:"lint_warnings,omitempty"`
-	Summary       string            `json:"summary"`
-	Feedback      string            `json:"feedback"` // Actionable feedback for agent
+	Success      bool              `json:"success"`
+	Stage        string            `json:"stage"`
+	SyntaxErrors []ValidationError `json:"syntax_errors,omitempty"`
+	TypeErrors   []ValidationError `json:"type_errors,omitempty"`
+	LintWarnings []ValidationError `json:"lint_warnings,omitempty"`
+	Summary      string            `json:"summary"`
+	Feedback     string            `json:"feedback"` // Actionable feedback for agent
 }
 
 type ValidationError struct {
@@ -57,14 +58,14 @@ var ValidatePackageJSON = map[string]interface{}{
 		"react-router-dom": "^6.22.0",
 	},
 	"devDependencies": map[string]string{
-		"@types/react":       "^18.2.0",
-		"@types/react-dom":   "^18.2.0",
-		"@vitejs/plugin-react": "^4.2.1",
-		"eslint":             "^8.57.0",
-		"eslint-plugin-react": "^7.33.2",
+		"@types/react":              "^18.2.0",
+		"@types/react-dom":          "^18.2.0",
+		"@vitejs/plugin-react":      "^4.2.1",
+		"eslint":                    "^8.57.0",
+		"eslint-plugin-react":       "^7.33.2",
 		"eslint-plugin-react-hooks": "^4.6.0",
-		"typescript":         "^5.3.0",
-		"vite":               "^5.1.0",
+		"typescript":                "^5.3.0",
+		"vite":                      "^5.1.0",
 	},
 }
 
@@ -125,78 +126,65 @@ func (v *Validator) ValidateCode(ctx context.Context, input map[string]interface
 		Stage:   "validation",
 	}
 
-	// Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "validator-*")
+	// Create sandbox configuration
+	config := sandbox.DefaultConfig(sandbox.LevelContainer)
+	config.ID = "test-" + strings.ReplaceAll(time.Now().Format("20060102-150405.000"), ".", "-")
+	config.ProjectID = "test-runner-app" // Fixed field name
+	config.Language = "javascript"
+	config.ReadOnlyRoot = false // Disabled to allow npm install to write to /root/.npm and /tmp
+	config.NetworkEnabled = true
+	config.MaxMemory = 1024 // Increased from 512 for better reliability
+
+	// Create and start sandbox
+	sb, err := v.sandboxManager.Create(ctx, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return nil, fmt.Errorf("failed to create sandbox: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer v.sandboxManager.Destroy(ctx, config.ID)
 
-	// Write all code files
+	// Prepare files
+	files := make(map[string]string)
 	for filename, content := range req.CodeFiles {
-		normalizedPath := filename
-		if strings.HasPrefix(normalizedPath, "/") {
-			normalizedPath = normalizedPath[1:]
-		}
-
-		filePath := filepath.Join(tmpDir, normalizedPath)
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return nil, fmt.Errorf("failed to write file %s: %w", filePath, err)
-		}
+		files[filename] = content
 	}
 
-	// Write package.json
+	// Always use our validation configs
 	packageJSONBytes, _ := json.MarshalIndent(ValidatePackageJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), packageJSONBytes, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write package.json: %w", err)
+	files["/package.json"] = string(packageJSONBytes)
+	files["/.eslintrc.json"] = ESLintConfig
+	files["/tsconfig.json"] = TSConfig
+
+	// Run npm install in sandbox
+	installReq := &sandbox.ExecuteRequest{
+		Command: "npm install --prefer-offline --silent",
+		Files:   files,
 	}
 
-	// Write ESLint config
-	if err := os.WriteFile(filepath.Join(tmpDir, ".eslintrc.json"), []byte(ESLintConfig), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write .eslintrc.json: %w", err)
-	}
-
-	// Write tsconfig for type checking
-	if err := os.WriteFile(filepath.Join(tmpDir, "tsconfig.json"), []byte(TSConfig), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write tsconfig.json: %w", err)
-	}
-
-	// Ensure src directory exists
-	srcDir := filepath.Join(tmpDir, "src")
-	os.MkdirAll(srcDir, 0755)
-
-	// Run npm install (quick, cached)
-	var installOut bytes.Buffer
-	installCmd := exec.CommandContext(ctx, "npm", "install", "--prefer-offline", "--silent")
-	installCmd.Dir = tmpDir
-	installCmd.Stdout = &installOut
-	installCmd.Stderr = &installOut
-
-	if err := installCmd.Run(); err != nil {
+	installResult, err := sb.Execute(ctx, installReq)
+	if err != nil || !installResult.Success {
+		output := ""
+		if installResult != nil {
+			output = installResult.Stdout + installResult.Stderr
+		}
 		return &ValidationResult{
-			Success: false,
-			Stage:   "install",
-			Summary: "Failed to install dependencies",
-			Feedback: fmt.Sprintf("npm install failed: %s\nPlease check package dependencies.", installOut.String()),
+			Success:  false,
+			Stage:    "install",
+			Summary:  "Failed to install dependencies",
+			Feedback: fmt.Sprintf("npm install failed: %s\nPlease check package dependencies.", output),
 		}, nil
 	}
 
 	// Stage 1.1: ESLint (syntax + lint)
-	var lintOut bytes.Buffer
-	lintCmd := exec.CommandContext(ctx, "npm", "run", "lint")
-	lintCmd.Dir = tmpDir
-	lintCmd.Stdout = &lintOut
-	lintCmd.Stderr = &lintOut
+	lintReq := &sandbox.ExecuteRequest{
+		Command: "npm run lint",
+	}
+	lintResult, err := sb.Execute(ctx, lintReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run lint in sandbox: %w", err)
+	}
 
-	lintErr := lintCmd.Run()
-	if lintErr != nil {
-		// Parse ESLint JSON output
-		lintErrors := parseLintOutput(lintOut.String())
+	if !lintResult.Success {
+		lintErrors := parseLintOutput(lintResult.Stdout + lintResult.Stderr)
 		if len(lintErrors) > 0 {
 			result.Success = false
 			result.LintWarnings = lintErrors
@@ -213,15 +201,16 @@ func (v *Validator) ValidateCode(ctx context.Context, input map[string]interface
 	}
 
 	if hasTypeScript {
-		var typeOut bytes.Buffer
-		typeCmd := exec.CommandContext(ctx, "npm", "run", "type-check")
-		typeCmd.Dir = tmpDir
-		typeCmd.Stdout = &typeOut
-		typeCmd.Stderr = &typeOut
+		typeReq := &sandbox.ExecuteRequest{
+			Command: "npm run type-check",
+		}
+		typeResult, err := sb.Execute(ctx, typeReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to run type-check in sandbox: %w", err)
+		}
 
-		typeErr := typeCmd.Run()
-		if typeErr != nil {
-			typeErrors := parseTypeErrors(typeOut.String())
+		if !typeResult.Success {
+			typeErrors := parseTypeErrors(typeResult.Stdout + typeResult.Stderr)
 			if len(typeErrors) > 0 {
 				result.Success = false
 				result.TypeErrors = typeErrors

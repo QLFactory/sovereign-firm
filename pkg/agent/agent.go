@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -128,8 +129,9 @@ type AgentInstance struct {
 	TerminatedAt *time.Time  `json:"terminated_at,omitempty"`
 
 	// Work
-	CurrentTask *Task      `json:"current_task,omitempty"`
-	Artifacts   []Artifact `json:"artifacts"`
+	CurrentTask     *Task      `json:"current_task,omitempty"`
+	Artifacts       []Artifact `json:"artifacts"`
+	PendingMessages []Message  `json:"pending_messages,omitempty"` // Messages to be processed in prompt
 
 	// Communication channels
 	Inbox  chan Message `json:"-"` // Receive messages
@@ -155,24 +157,25 @@ func NewAgentInstance(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	agent := &AgentInstance{
-		ID:            uuid.New().String(),
-		Name:          name,
-		Role:          role,
-		Skills:        skills,
-		Model:         model,
-		Temperature:   0.7, // Default temperature
-		ProjectID:     projectID,
-		Context:       &AgentContext{ProjectID: projectID},
-		Status:        StatusSpawning,
-		CreatedAt:     time.Now(),
-		Artifacts:     make([]Artifact, 0),
-		Inbox:         make(chan Message, 100),
-		Outbox:        make(chan Message, 100),
-		TokensUsed:    0,
-		TasksComplete: 0,
-		llmClient:     llmClient,
-		ctx:           ctx,
-		cancel:        cancel,
+		ID:              uuid.New().String(),
+		Name:            name,
+		Role:            role,
+		Skills:          skills,
+		Model:           model,
+		Temperature:     0.7, // Default temperature
+		ProjectID:       projectID,
+		Context:         &AgentContext{ProjectID: projectID},
+		Status:          StatusSpawning,
+		CreatedAt:       time.Now(),
+		Artifacts:       make([]Artifact, 0),
+		PendingMessages: make([]Message, 0),
+		Inbox:           make(chan Message, 100),
+		Outbox:          make(chan Message, 100),
+		TokensUsed:      0,
+		TasksComplete:   0,
+		llmClient:       llmClient,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 
 	// Compile system prompt from role and skills
@@ -306,19 +309,38 @@ func (a *AgentInstance) processMessages() {
 
 // handleMessage processes a single incoming message
 func (a *AgentInstance) handleMessage(msg Message) {
-	// TODO: Implement message handling logic based on type
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	log.Printf("Agent %s (%s) received message: %s from %s", a.Name, a.ID, msg.Type, msg.From)
+
 	switch msg.Type {
-	case MessageQuestion:
-		// Handle question
-	case MessageRequest:
-		// Handle request
-	case MessageReview:
-		// Handle review request
+	case MessageQuestion, MessageRequest:
+		// Persist for prompt injection
+		a.PendingMessages = append(a.PendingMessages, msg)
+	case MessageAnswer:
+		// Answers are handled by the executor loop waiting for replies
 	case MessageArtifact:
-		// Store shared artifact
+		if artifact, ok := msg.Content.(Artifact); ok {
+			a.Artifacts = append(a.Artifacts, artifact)
+			if a.Context != nil {
+				a.Context.SharedArtifacts = append(a.Context.SharedArtifacts, artifact)
+			}
+		}
+	case MessageStatus:
+		// Update peer status if tracked
+	case MessageReview:
+		// Process review requests
 	default:
 		// Log unknown message type
 	}
+}
+
+// ClearPendingMessages clears the list of pending inter-agent messages
+func (a *AgentInstance) ClearPendingMessages() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.PendingMessages = make([]Message, 0)
 }
 
 // Terminate shuts down the agent

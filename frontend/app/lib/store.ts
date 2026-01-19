@@ -20,6 +20,7 @@ import type {
   User,
   LoginRequest,
   RegisterRequest,
+  Invitation,
 } from "./api/types";
 import { api, loadProjectsFromStorage, saveProjectsToStorage, createProjectFromConfig } from "./api/client";
 
@@ -38,6 +39,9 @@ interface AppState {
   projects: Project[];
   currentProject: Project | null;
   currentState: ConsultancyState | null;
+
+  // Team
+  team: User[];
 
   // UI State
   activeLeftTab: LeftPanelTab;
@@ -82,6 +86,11 @@ interface AppActions {
   fetchProjectState: (id: string) => Promise<void>;
   updateProjectPhase: (id: string, phase: Phase) => void;
   sendMessage: (message: string) => Promise<void>;
+
+  // Team actions
+  loadTeam: () => Promise<void>;
+  updateUserRole: (userId: string, role: string) => Promise<void>;
+  inviteUser: (email: string, role?: string) => Promise<Invitation | null>;
 
   // UI actions
   setActiveLeftTab: (tab: LeftPanelTab) => void;
@@ -140,6 +149,9 @@ const initialState: AppState = {
   projects: [],
   currentProject: null,
   currentState: null,
+
+  // Team
+  team: [],
 
   // UI State
   activeLeftTab: "chat",
@@ -298,7 +310,7 @@ export const useAppStore = create<AppStore>()(
 
         try {
           const response = await api.createProject(config);
-          const newProject = createProjectFromConfig(response.workflow_id, config);
+          const newProject = createProjectFromConfig(response.id || response.workflow_id, response.workflow_id, config);
 
           set((state) => {
             state.projects.unshift(newProject);
@@ -352,9 +364,19 @@ export const useAppStore = create<AppStore>()(
           const projectState = await api.getProject(id);
 
           set((state) => {
-            state.currentState = projectState;
-            state.chatHistory = projectState.chat_history || "";
             state.isLoading = false;
+            // Use updateCurrentState logic via set
+            if (state.currentState) {
+              Object.assign(state.currentState, projectState);
+            } else {
+              state.currentState = projectState;
+            }
+
+            // Propagation
+            state.chatHistory = projectState.chat_history || "";
+            state.dagState = projectState.dag || null;
+            state.activeAgents = projectState.agents || [];
+            state.ciStages = projectState.ci_status?.stages || [];
 
             // Update project phase in the list
             const projectIndex = state.projects.findIndex((p) => p.id === id);
@@ -401,6 +423,56 @@ export const useAppStore = create<AppStore>()(
           await api.sendMessage(currentProject.id, message);
         } catch (error) {
           addTerminalLine(`❌ Failed to send message: ${error}`);
+        }
+      },
+
+      // =========================================================================
+      // Team Actions
+      // =========================================================================
+
+      loadTeam: async () => {
+        set((state) => {
+          state.isLoading = true;
+        });
+        try {
+          const team = await api.listUsers();
+          set((state) => {
+            state.team = team;
+            state.isLoading = false;
+          });
+        } catch (error) {
+          set((state) => {
+            state.isLoading = false;
+            state.error = error instanceof Error ? error.message : "Failed to load team";
+          });
+        }
+      },
+
+      updateUserRole: async (userId: string, role: string) => {
+        try {
+          await api.updateUserRole(userId, role);
+          set((state) => {
+            const index = state.team.findIndex((u) => u.id === userId);
+            if (index >= 0) {
+              state.team[index].role = role;
+            }
+          });
+        } catch (error) {
+          set((state) => {
+            state.error = error instanceof Error ? error.message : "Failed to update role";
+          });
+        }
+      },
+
+      inviteUser: async (email: string, role: string = "member") => {
+        try {
+          const invitation = await api.inviteUser(email, role);
+          return invitation;
+        } catch (error) {
+          set((state) => {
+            state.error = error instanceof Error ? error.message : "Failed to invite user";
+          });
+          return null;
         }
       },
 
@@ -570,6 +642,24 @@ export const useAppStore = create<AppStore>()(
           } else {
             state.currentState = updates as ConsultancyState;
           }
+
+          // Propagate critical fields to top-level store
+          if (updates.phase) {
+            // Update current project phase
+            if (state.currentProject) {
+              state.currentProject.phase = updates.phase;
+            }
+            // Update in projects list
+            const idx = state.projects.findIndex((p) => p.id === state.currentProject?.id);
+            if (idx >= 0) {
+              state.projects[idx].phase = updates.phase;
+            }
+          }
+
+          if (updates.dag) state.dagState = updates.dag;
+          if (updates.agents) state.activeAgents = updates.agents;
+          if (updates.ci_status) state.ciStages = updates.ci_status.stages;
+          if (updates.chat_history) state.chatHistory = updates.chat_history;
         });
       },
 

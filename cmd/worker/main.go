@@ -12,14 +12,17 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/joho/godotenv"
+	"github.com/qlfactory/sovereign-firm/pkg/agent" // Added
 	"github.com/qlfactory/sovereign-firm/pkg/firm/activities"
 	"github.com/qlfactory/sovereign-firm/pkg/firm/workflows"
+	"github.com/qlfactory/sovereign-firm/pkg/sandbox"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/llm"
 )
 
 func main() {
 	// Load .env file
-	if err := godotenv.Load(); err != nil {
+	var err error
+	if err = godotenv.Load(); err != nil {
 		log.Println("No .env file found")
 	}
 
@@ -38,7 +41,7 @@ func main() {
 	if dbURL == "" {
 		dbURL = "postgres://sovereign:sovereign123@localhost:5432/sovereign_firm?sslmode=disable"
 	}
-	dbPool, err := pgxpool.New(ctx, dbURL)
+	dbPool, err = pgxpool.New(ctx, dbURL)
 	if err != nil {
 		log.Printf("Warning: Database not available: %v (phase updates will be skipped)", err)
 		dbPool = nil
@@ -72,25 +75,44 @@ func main() {
 	w.RegisterWorkflow(workflows.ProjectLifecycle)
 	w.RegisterWorkflow(workflows.ConsultancyWorkflow)
 
+	// Initialize Sandbox Manager
+	sandboxMgr := sandbox.NewManager()
+	defer sandboxMgr.DestroyAll(ctx)
+
+	// Initialize Agent System
+	skillsDir := os.Getenv("SKILLS_DIR")
+	if skillsDir == "" {
+		skillsDir = "skills"
+	}
+	skillRegistry := agent.NewSkillRegistry(skillsDir)
+	if err := skillRegistry.LoadSkills(); err != nil {
+		log.Printf("Warning: Failed to load skills from %s: %v", skillsDir, err)
+	} else {
+		log.Printf("✅ Loaded %d skills from %s", skillRegistry.Count(), skillsDir)
+	}
+
+	agentPool := agent.NewAgentPool(agent.DefaultPoolConfig(), skillRegistry, llmClient)
+	defer agentPool.Shutdown()
+
 	// Register Activities
-	pmAgent := activities.NewPMAgent()
+	pmAgent := activities.NewPMAgent(agentPool)
 	w.RegisterActivityWithOptions(pmAgent.Chat, activity.RegisterOptions{Name: "PMAgentChat"})
 
-	indexer := activities.NewIndexer()
-	w.RegisterActivityWithOptions(indexer.IndexRepo, activity.RegisterOptions{Name: "IndexRepo"})
+	indexer := activities.NewIndexer(agentPool)
+	w.RegisterActivityWithOptions(indexer.IndexRepository, activity.RegisterOptions{Name: "IndexRepo"})
 
-	devAgent := activities.NewDevAgent()
+	devAgent := activities.NewDevAgent(agentPool)
 	w.RegisterActivityWithOptions(devAgent.GenerateCode, activity.RegisterOptions{Name: "DevAgentGenerate"})
 	w.RegisterActivityWithOptions(devAgent.RefineCode, activity.RegisterOptions{Name: "DevAgentRefine"})
 
-	qaAgent := activities.NewQAAgent()
+	qaAgent := activities.NewQAAgent(agentPool)
 	w.RegisterActivityWithOptions(qaAgent.GenerateTests, activity.RegisterOptions{Name: "QAAgentGenerateTests"})
 	w.RegisterActivityWithOptions(qaAgent.RegenerateTests, activity.RegisterOptions{Name: "QAAgentRegenerateTests"})
 
-	testRunner := activities.NewTestRunner()
+	testRunner := activities.NewTestRunner(sandboxMgr)
 	w.RegisterActivityWithOptions(testRunner.RunTests, activity.RegisterOptions{Name: "RunTests"})
 
-	validator := activities.NewValidator()
+	validator := activities.NewValidator(sandboxMgr)
 	w.RegisterActivityWithOptions(validator.ValidateCode, activity.RegisterOptions{Name: "ValidateCode"})
 
 	critic := activities.NewCodeCritic()
@@ -168,11 +190,7 @@ func main() {
 	w.RegisterActivityWithOptions(enhancedPM.RefinePM, activity.RegisterOptions{Name: "PMRefine"})
 
 	// Skill Injection System - Dynamic Skill Selection, Agent Spawning, Skill Composition
-	skillsDir := os.Getenv("SKILLS_DIR")
-	if skillsDir == "" {
-		skillsDir = "./skills"
-	}
-	skillInjector := activities.NewSkillInjector(skillsDir)
+	skillInjector := activities.NewSkillInjectorWithRegistry(skillRegistry)
 	w.RegisterActivityWithOptions(skillInjector.SelectSkills, activity.RegisterOptions{Name: "SkillSelectSkills"})
 	w.RegisterActivityWithOptions(skillInjector.SpawnSkilledAgent, activity.RegisterOptions{Name: "SkillSpawnAgent"})
 	w.RegisterActivityWithOptions(skillInjector.ComposeSkills, activity.RegisterOptions{Name: "SkillComposeSkills"})

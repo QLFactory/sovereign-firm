@@ -10,10 +10,12 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/bash"
+	"github.com/smacker/go-tree-sitter/cpp"
 	"github.com/smacker/go-tree-sitter/css"
 	"github.com/smacker/go-tree-sitter/golang"
 	"github.com/smacker/go-tree-sitter/html"
 	"github.com/smacker/go-tree-sitter/javascript"
+	"github.com/smacker/go-tree-sitter/php"
 	"github.com/smacker/go-tree-sitter/python"
 	"github.com/smacker/go-tree-sitter/rust"
 	"github.com/smacker/go-tree-sitter/toml"
@@ -36,16 +38,20 @@ const (
 	LangRust       Language = "rust"
 	LangHTML       Language = "html"
 	LangCSS        Language = "css"
-	LangJSON       Language = "json"     // Not parsed, just detected
+	LangJSON       Language = "json" // Not parsed, just detected
 	LangYAML       Language = "yaml"
 	LangTOML       Language = "toml"
 	LangBash       Language = "bash"
 	LangMarkdown   Language = "markdown"
+	LangPHP        Language = "php"
+	LangCPP        Language = "cpp"
+	LangC          Language = "c"
 )
 
 // Parser provides multi-language code parsing using tree-sitter
 type Parser struct {
 	parsers map[Language]*sitter.Parser
+	queries map[string]*sitter.Query // key is lang:queryStr
 	mu      sync.RWMutex
 }
 
@@ -53,6 +59,7 @@ type Parser struct {
 func NewParser() *Parser {
 	return &Parser{
 		parsers: make(map[Language]*sitter.Parser),
+		queries: make(map[string]*sitter.Query),
 	}
 }
 
@@ -108,6 +115,10 @@ func getSitterLanguage(lang Language) (*sitter.Language, error) {
 		return toml.GetLanguage(), nil
 	case LangBash:
 		return bash.GetLanguage(), nil
+	case LangPHP:
+		return php.GetLanguage(), nil
+	case LangCPP, LangC:
+		return cpp.GetLanguage(), nil
 	default:
 		return nil, fmt.Errorf("unsupported language: %s", lang)
 	}
@@ -188,6 +199,12 @@ func DetectLanguage(filePath string, source []byte) Language {
 		return LangBash
 	case ".md", ".markdown":
 		return LangMarkdown
+	case ".php":
+		return LangPHP
+	case ".cpp", ".cc", ".cxx", ".hpp":
+		return LangCPP
+	case ".c", ".h":
+		return LangC
 	}
 
 	switch baseName {
@@ -231,6 +248,7 @@ func SupportedLanguages() []Language {
 		LangJavaScript, LangTypeScript, LangTSX, LangJSX,
 		LangGo, LangPython, LangRust,
 		LangHTML, LangCSS, LangYAML, LangTOML, LangBash,
+		LangPHP, LangCPP, LangC,
 	}
 }
 
@@ -244,6 +262,60 @@ func IsSupported(lang Language) bool {
 	return false
 }
 
+// ExecuteQuery runs a tree-sitter query on the source
+func (p *Parser) ExecuteQuery(lang Language, node *sitter.Node, queryStr string) ([]*sitter.QueryMatch, error) {
+	query, err := p.getSitterQuery(lang, queryStr)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor := sitter.NewQueryCursor()
+	defer cursor.Close()
+
+	cursor.Exec(query, node)
+
+	var matches []*sitter.QueryMatch
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		matches = append(matches, match)
+	}
+
+	return matches, nil
+}
+
+func (p *Parser) getSitterQuery(lang Language, queryStr string) (*sitter.Query, error) {
+	key := fmt.Sprintf("%s:%s", lang, queryStr)
+	p.mu.RLock()
+	if query, ok := p.queries[key]; ok {
+		p.mu.RUnlock()
+		return query, nil
+	}
+	p.mu.RUnlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if query, ok := p.queries[key]; ok {
+		return query, nil
+	}
+
+	sitterLang, err := getSitterLanguage(lang)
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := sitter.NewQuery([]byte(queryStr), sitterLang)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create query: %w", err)
+	}
+
+	p.queries[key] = query
+	return query, nil
+}
+
 // Close releases all parser resources
 func (p *Parser) Close() {
 	p.mu.Lock()
@@ -251,5 +323,9 @@ func (p *Parser) Close() {
 	for _, parser := range p.parsers {
 		parser.Close()
 	}
+	for _, query := range p.queries {
+		query.Close()
+	}
 	p.parsers = make(map[Language]*sitter.Parser)
+	p.queries = make(map[string]*sitter.Query)
 }

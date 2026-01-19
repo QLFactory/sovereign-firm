@@ -9,13 +9,13 @@ interface DAGProgressDashboardProps {
 }
 
 // Status colors and icons
-const statusConfig: Record<DAGTask["status"], { bg: string; text: string; icon: string; border: string }> = {
-  PENDING: { bg: "bg-zinc-800", text: "text-zinc-400", icon: "○", border: "border-zinc-600" },
-  READY: { bg: "bg-blue-900/50", text: "text-blue-300", icon: "◎", border: "border-blue-500" },
-  RUNNING: { bg: "bg-yellow-900/50", text: "text-yellow-300", icon: "◉", border: "border-yellow-500" },
-  COMPLETED: { bg: "bg-green-900/50", text: "text-green-300", icon: "✓", border: "border-green-500" },
-  FAILED: { bg: "bg-red-900/50", text: "text-red-300", icon: "✗", border: "border-red-500" },
-  BLOCKED: { bg: "bg-zinc-900", text: "text-zinc-500", icon: "⊘", border: "border-zinc-700" },
+const statusConfig: Record<DAGTask["status"], { bg: string; text: string; icon: string; border: string; glow: string }> = {
+  PENDING: { bg: "bg-transparent", text: "text-[var(--silver)]/40", icon: "○", border: "border-[var(--glass-border)]", glow: "" },
+  READY: { bg: "bg-[var(--cyan-glow)]/10", text: "text-[var(--cyan-glow)]", icon: "◎", border: "border-[var(--cyan-glow)]/30", glow: "shadow-glow-cyan/10" },
+  RUNNING: { bg: "bg-[var(--amber-glow)]/10", text: "text-[var(--amber-glow)]", icon: "◉", border: "border-[var(--amber-glow)]/30", glow: "shadow-glow-amber/20" },
+  COMPLETED: { bg: "bg-[var(--emerald-glow)]/10", text: "text-[var(--emerald-glow)]", icon: "✓", border: "border-[var(--emerald-glow)]/30", glow: "shadow-glow-emerald/20" },
+  FAILED: { bg: "bg-[var(--rose-glow)]/10", text: "text-[var(--rose-glow)]", icon: "✗", border: "border-[var(--rose-glow)]/30", glow: "shadow-glow-rose/20" },
+  BLOCKED: { bg: "bg-[var(--carbon)]/50", text: "text-[var(--silver)]/30", icon: "⊘", border: "border-[var(--glass-border)]", glow: "" },
 };
 
 // Task type icons
@@ -48,7 +48,7 @@ export default function DAGProgressDashboard({ dagState, onTaskClick }: DAGProgr
         if (placed.has(task.id)) continue;
 
         // Check if all dependencies are placed
-        const depsPlaced = task.dependencies.every((dep) => placed.has(dep));
+        const depsPlaced = !task.dependencies || task.dependencies.every((dep) => placed.has(dep));
         if (depsPlaced) {
           layer.push(task);
         }
@@ -90,40 +90,40 @@ export default function DAGProgressDashboard({ dagState, onTaskClick }: DAGProgr
   return (
     <div className="flex flex-col h-full">
       {/* Progress Header */}
-      <div className="p-3 border-b border-zinc-800">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="font-semibold text-sm">Task Progress</h3>
-          <span className="text-xs text-zinc-400">
-            {dagState.completed}/{dagState.total} tasks
+      <div className="p-4 border-b border-[var(--glass-border)] bg-[var(--carbon)]/30">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-bold text-[11px] uppercase tracking-widest text-[var(--silver)]">Task Orchestration</h3>
+          <span className="text-[10px] font-mono text-[var(--silver)] opacity-40">
+            {progress}% COHERENCE
           </span>
         </div>
 
         {/* Progress Bar */}
-        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-[var(--void)] rounded-full overflow-hidden border border-[var(--glass-border)] shadow-inner">
           <div
-            className="h-full bg-gradient-to-r from-blue-600 to-green-500 transition-all duration-500"
+            className="h-full bg-gradient-to-r from-[var(--cyan-glow)] via-[var(--cyan-bright)] to-[var(--emerald-glow)] transition-all duration-700 ease-out shadow-glow-cyan"
             style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* Status Summary */}
-        <div className="flex gap-3 mt-2 text-xs">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500" />
-            {dagState.completed} done
+        <div className="flex gap-4 mt-3 text-[10px] font-bold tracking-tight uppercase">
+          <span className="flex items-center gap-1.5 text-[var(--emerald-glow)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--emerald-glow)] shadow-glow-emerald" />
+            {dagState.completed} DONE
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-            {dagState.running} running
+          <span className="flex items-center gap-1.5 text-[var(--amber-glow)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--amber-glow)] animate-pulse shadow-glow-amber" />
+            {dagState.running} RUNNING
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-zinc-500" />
-            {dagState.pending} pending
+          <span className="flex items-center gap-1.5 text-[var(--silver)] opacity-50">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--silver)] opacity-30" />
+            {dagState.pending} PENDING
           </span>
           {dagState.failed > 0 && (
-            <span className="flex items-center gap-1 text-red-400">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              {dagState.failed} failed
+            <span className="flex items-center gap-1.5 text-[var(--rose-glow)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--rose-glow)] shadow-glow-rose" />
+              {dagState.failed} FAULT
             </span>
           )}
         </div>
@@ -135,10 +135,10 @@ export default function DAGProgressDashboard({ dagState, onTaskClick }: DAGProgr
           {layers.map((layer, layerIdx) => (
             <div key={layerIdx} className="relative">
               {/* Layer Label */}
-              <div className="text-xs text-zinc-600 mb-2 flex items-center gap-2">
-                <span className="font-medium">Layer {layerIdx + 1}</span>
-                <span className="flex-1 h-px bg-zinc-800" />
-                <span>{layer.length} task{layer.length !== 1 ? "s" : ""}</span>
+              <div className="text-[10px] text-[var(--silver)]/40 mb-3 flex items-center gap-3 uppercase font-bold tracking-[0.2em]">
+                <span className="whitespace-nowrap">LAYER_{layerIdx.toString().padStart(2, '0')}</span>
+                <span className="flex-1 h-px bg-gradient-to-r from-[var(--glass-border)] to-transparent" />
+                <span className="whitespace-nowrap italic">{layer.length} STACKED_NODES</span>
               </div>
 
               {/* Tasks in Layer */}
@@ -152,58 +152,61 @@ export default function DAGProgressDashboard({ dagState, onTaskClick }: DAGProgr
                       key={task.id}
                       onClick={() => onTaskClick?.(task)}
                       className={`
-                        p-3 rounded-lg border transition-all text-left
-                        ${config.bg} ${config.border}
-                        hover:scale-[1.02] hover:shadow-lg
+                        p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group glass
+                        ${config.bg} ${config.border} ${config.glow}
+                        hover:border-[var(--ivory)]/40 hover:-translate-y-0.5
                         ${task.status === "RUNNING" ? "animate-pulse" : ""}
                       `}
                     >
-                      <div className="flex items-start gap-2">
-                        <span className="text-lg">{typeIcon}</span>
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full glass flex items-center justify-center text-xl border border-[var(--ivory)]/10">
+                          {typeIcon}
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className={`font-medium text-sm truncate ${config.text}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`font-bold text-xs uppercase tracking-widest truncate ${config.text}`}>
                               {task.name}
                             </span>
-                            <span className={`text-xs ${config.text}`}>
+                            <span className={`text-[10px] font-bold ${config.text}`}>
                               {config.icon}
                             </span>
                           </div>
 
                           {task.description && (
-                            <p className="text-xs text-zinc-500 truncate mt-0.5">
+                            <p className="text-[10px] text-[var(--silver)]/60 truncate mt-1 leading-tight">
                               {task.description}
                             </p>
                           )}
 
                           {/* Agent Assignment */}
                           {task.assigned_to && (
-                            <div className="text-xs text-zinc-500 mt-1 flex items-center gap-1">
-                              <span>🤖</span>
+                            <div className="text-[9px] font-bold text-[var(--violet-glow)] mt-2 flex items-center gap-1.5 uppercase tracking-wider">
+                              <span className="w-1 h-1 rounded-full bg-[var(--violet-glow)]" />
                               <span className="truncate">{task.assigned_to}</span>
                             </div>
                           )}
 
                           {/* Error Message */}
                           {task.error && (
-                            <div className="text-xs text-red-400 mt-1 truncate">
-                              ⚠️ {task.error}
+                            <div className="text-[9px] text-[var(--rose-glow)] mt-1.5 font-medium border-t border-[var(--rose-glow)]/10 pt-1">
+                              FAULT: {task.error}
                             </div>
                           )}
 
                           {/* Retry Count */}
                           {task.retry_count && task.retry_count > 0 && (
-                            <div className="text-xs text-yellow-500 mt-1">
-                              🔄 Retry {task.retry_count}
+                            <div className="text-[9px] text-[var(--amber-glow)] mt-1 font-bold">
+                              REBOUND_{task.retry_count}
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Dependencies Indicator */}
-                      {task.dependencies.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-700/50 text-xs text-zinc-600">
-                          ← {task.dependencies.length} dep{task.dependencies.length !== 1 ? "s" : ""}
+                      {task.dependencies && task.dependencies.length > 0 && (
+                        <div className="mt-3 pt-2 border-t border-[var(--glass-border)] text-[9px] font-mono text-[var(--silver)] opacity-30 flex justify-between items-center">
+                          <span>DEPENDENCIES</span>
+                          <span className="px-1.5 py-0.5 rounded bg-[var(--carbon)] border border-[var(--glass-border)]">0x{task.dependencies.length.toString(16)}</span>
                         </div>
                       )}
                     </button>
@@ -213,8 +216,8 @@ export default function DAGProgressDashboard({ dagState, onTaskClick }: DAGProgr
 
               {/* Connection Lines to Next Layer */}
               {layerIdx < layers.length - 1 && (
-                <div className="flex justify-center mt-2">
-                  <div className="w-px h-4 bg-zinc-700" />
+                <div className="flex justify-center mt-3">
+                  <div className="w-px h-6 bg-gradient-to-b from-[var(--glass-border)] to-transparent" />
                 </div>
               )}
             </div>

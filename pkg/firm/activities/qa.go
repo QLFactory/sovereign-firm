@@ -5,30 +5,32 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/qlfactory/sovereign-firm/pkg/agent"
+	"github.com/qlfactory/sovereign-firm/pkg/mcp"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/llm"
 )
 
 type QAAgent struct {
 	llmClient llm.Client
+	pool      *agent.AgentPool
 }
 
-func NewQAAgent() *QAAgent {
+func NewQAAgent(pool *agent.AgentPool) *QAAgent {
 	return &QAAgent{
 		llmClient: llm.NewClient(),
+		pool:      pool,
 	}
 }
 
-type QAGenerateInput struct {
-	Spec      string            `json:"spec"`
-	CodeFiles map[string]string `json:"code_files"`
-}
+// GenerateTests creates a test suite for the code
+func (a *QAAgent) GenerateTests(ctx context.Context, input QAGenerateInput) (map[string]string, error) {
+	spec := input.Spec
+	codeFiles := input.CodeFiles
+	projectID := input.ProjectID
 
-// GenerateTests analyzes code and writes Jest tests
-func (a *QAAgent) GenerateTests(ctx context.Context, input map[string]interface{}) (map[string]string, error) {
-	// Manual unmarshal
-	inputBytes, _ := json.Marshal(input)
-	var req QAGenerateInput
-	json.Unmarshal(inputBytes, &req)
+	if projectID == "" {
+		projectID = "default-project"
+	}
 
 	sysPrompt := `You are a Senior QA Engineer specialized in React Testing Library and Vitest.
 Your goal is to write comprehensive unit tests for the provided React application.
@@ -65,16 +67,16 @@ describe('App', () => {
 
 	// Build list of existing files for the prompt
 	fileList := "EXISTING FILES (ONLY test these files):\n"
-	for name := range req.CodeFiles {
+	for name := range codeFiles {
 		fileList += fmt.Sprintf("- %s\n", name)
 	}
 
 	codeContext := "\nAPPLICATION CODE:\n"
-	for name, content := range req.CodeFiles {
+	for name, content := range codeFiles {
 		codeContext += fmt.Sprintf("File: %s\n```\n%s\n```\n", name, content)
 	}
 
-	prompt := fmt.Sprintf("%s\n%s\n\nSPECIFICATION:\n%s\n\nGenerate test files ONLY for the files listed above. Do NOT create tests for files that don't exist.", fileList, codeContext, req.Spec)
+	prompt := fmt.Sprintf("%s\n%s\n\nSPECIFICATION:\n%s\n\nGenerate test files ONLY for the files listed above. Do NOT create tests for files that don't exist.", fileList, codeContext, spec)
 
 	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
 		Prompt: prompt,
@@ -84,6 +86,20 @@ describe('App', () => {
 	if err != nil {
 		return nil, fmt.Errorf("QA brain failed: %w", err)
 	}
+
+	// Spawn or get agent for this project
+	agentInstance, err := a.pool.SpawnAgent(ctx, "QA", "qa-engineer", projectID, "gpt-4", []string{"qa-engineer"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to spawn agent: %w", err)
+	}
+
+	// Setup tool registry
+	registry := mcp.NewToolRegistry()
+	mcp.RegisterBuiltinToolsWithConfig(registry, ".", &mcp.ToolConfig{
+		ProjectID: projectID,
+		AgentID:   agentInstance.ID,
+		Messaging: a.pool,
+	})
 
 	var rawTests map[string]interface{}
 	if err := a.extractAndUnmarshalJSON(resp.Response, &rawTests); err != nil {
@@ -134,11 +150,12 @@ describe('App', () => {
 
 // QARegenerateInput contains the context for regenerating failed tests
 type QARegenerateInput struct {
-	Spec        string            `json:"spec"`
-	CodeFiles   map[string]string `json:"code_files"`
-	TestFiles   map[string]string `json:"test_files"`
-	TestOutput  string            `json:"test_output"`
-	Attempt     int               `json:"attempt"`
+	Spec       string            `json:"spec"`
+	CodeFiles  map[string]string `json:"code_files"`
+	TestFiles  map[string]string `json:"test_files"`
+	TestOutput string            `json:"test_output"`
+	Attempt    int               `json:"attempt"`
+	ProjectID  string            `json:"project_id"` // Added ProjectID field
 }
 
 // RegenerateTests takes failed test output and regenerates better tests

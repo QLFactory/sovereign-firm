@@ -54,6 +54,10 @@ type Config struct {
 	NetworkEnabled bool     `json:"network_enabled"`
 	AllowedHosts   []string `json:"allowed_hosts"`
 
+	// Security
+	ReadOnlyRoot   bool   `json:"read_only_root"`
+	SeccompProfile string `json:"seccomp_profile"`
+
 	// Language/runtime
 	Language string `json:"language"`
 	Runtime  string `json:"runtime"` // e.g., "node:20", "go:1.21", "python:3.11"

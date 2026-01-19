@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qlfactory/sovereign-firm/pkg/firm/activities"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -43,18 +44,18 @@ type DevOpsBundle struct {
 type ConsultancyPhase string
 
 const (
-	PhaseIntake        ConsultancyPhase = "INTAKE"
-	PhaseSizing        ConsultancyPhase = "SIZING"
-	PhasePlanning      ConsultancyPhase = "PLANNING"
-	PhaseArchitecture  ConsultancyPhase = "ARCHITECTURE"
-	PhaseDevelopment   ConsultancyPhase = "DEVELOPMENT"
-	PhaseTesting       ConsultancyPhase = "TESTING"
-	PhaseDeployment    ConsultancyPhase = "DEPLOYMENT"
-	PhaseOperations    ConsultancyPhase = "OPERATIONS"
-	PhaseHandoff       ConsultancyPhase = "HANDOFF"
-	PhaseComplete      ConsultancyPhase = "COMPLETE"
-	PhaseReview        ConsultancyPhase = "REVIEW"
-	PhaseFailed        ConsultancyPhase = "FAILED"
+	PhaseIntake       ConsultancyPhase = "INTAKE"
+	PhaseSizing       ConsultancyPhase = "SIZING"
+	PhasePlanning     ConsultancyPhase = "PLANNING"
+	PhaseArchitecture ConsultancyPhase = "ARCHITECTURE"
+	PhaseDevelopment  ConsultancyPhase = "DEVELOPMENT"
+	PhaseTesting      ConsultancyPhase = "TESTING"
+	PhaseDeployment   ConsultancyPhase = "DEPLOYMENT"
+	PhaseOperations   ConsultancyPhase = "OPERATIONS"
+	PhaseHandoff      ConsultancyPhase = "HANDOFF"
+	PhaseComplete     ConsultancyPhase = "COMPLETE"
+	PhaseReview       ConsultancyPhase = "REVIEW"
+	PhaseFailed       ConsultancyPhase = "FAILED"
 )
 
 // BrownfieldConfig contains configuration for brownfield import
@@ -68,22 +69,26 @@ type BrownfieldConfig struct {
 
 // BrownfieldStatus represents the status of a brownfield import operation
 type BrownfieldStatus struct {
-	Status        string `json:"status"` // "analyzing", "complete", "error"
-	FilesIndexed  int    `json:"files_indexed"`
-	ChunksCreated int    `json:"chunks_created"`
-	SymbolsFound  int    `json:"symbols_found"`
-	Error         string `json:"error,omitempty"`
+	Status        string   `json:"status"` // "analyzing", "complete", "error"
+	FilesIndexed  int      `json:"files_indexed"`
+	ChunksCreated int      `json:"chunks_created"`
+	SymbolsFound  int      `json:"symbols_found"`
+	PrimaryLang   string   `json:"primary_lang,omitempty"`
+	DetectedStack []string `json:"detected_stack,omitempty"`
+	Error         string   `json:"error,omitempty"`
+	Phase         string   `json:"phase,omitempty"`
 }
 
 // ConsultancyConfig contains configuration for the consultancy workflow
 type ConsultancyConfig struct {
 	// Project settings
+	ProjectID        string `json:"project_id"` // Database UUID
 	ProjectName      string `json:"project_name"`
 	ClientID         string `json:"client_id"`
-	InitialMessage   string `json:"initial_message"`    // Initial project description (skips intake chat)
-	EnableFullStack  bool   `json:"enable_full_stack"`  // Full stack vs frontend-only
-	EnableDeployment bool   `json:"enable_deployment"`  // Generate deployment configs
-	EnableSRE        bool   `json:"enable_sre"`         // Generate monitoring/alerting
+	InitialMessage   string `json:"initial_message"`   // Initial project description (skips intake chat)
+	EnableFullStack  bool   `json:"enable_full_stack"` // Full stack vs frontend-only
+	EnableDeployment bool   `json:"enable_deployment"` // Generate deployment configs
+	EnableSRE        bool   `json:"enable_sre"`        // Generate monitoring/alerting
 
 	// Tech preferences (if empty, architect will decide)
 	PreferredFrontend string `json:"preferred_frontend"` // React, Vue, Angular
@@ -102,7 +107,8 @@ type ConsultancyConfig struct {
 // ConsultancyState holds the complete state of a consultancy project
 type ConsultancyState struct {
 	// Project identity
-	ProjectID   string           `json:"project_id"`
+	ProjectID   string           `json:"project_id"`  // Database UUID
+	WorkflowID  string           `json:"workflow_id"` // Temporal ID
 	ProjectName string           `json:"project_name"`
 	ClientID    string           `json:"client_id"`
 	Phase       ConsultancyPhase `json:"phase"`
@@ -126,24 +132,24 @@ type ConsultancyState struct {
 	APISpec        map[string]interface{} `json:"api_spec"`
 
 	// Development artifacts
-	FrontendCode  map[string]string `json:"frontend_code"`
-	BackendCode   map[string]string `json:"backend_code"`
-	DatabaseCode  map[string]string `json:"database_code"` // Migrations, schemas
-	AllCodeFiles  map[string]string `json:"all_code_files"`
+	FrontendCode map[string]string `json:"frontend_code"`
+	BackendCode  map[string]string `json:"backend_code"`
+	DatabaseCode map[string]string `json:"database_code"` // Migrations, schemas
+	AllCodeFiles map[string]string `json:"all_code_files"`
 
 	// Testing artifacts
-	UnitTests        map[string]string `json:"unit_tests"`
-	IntegrationTests map[string]string `json:"integration_tests"`
-	E2ETests         map[string]string `json:"e2e_tests"`
+	UnitTests        map[string]string      `json:"unit_tests"`
+	IntegrationTests map[string]string      `json:"integration_tests"`
+	E2ETests         map[string]string      `json:"e2e_tests"`
 	TestCoverage     map[string]interface{} `json:"test_coverage"`
 
 	// Deployment artifacts
-	Dockerfile      string            `json:"dockerfile"`
-	DockerCompose   string            `json:"docker_compose"`
-	KubeManifests   map[string]string `json:"kube_manifests"`
-	HelmChart       map[string]string `json:"helm_chart"`
-	CIPipeline      string            `json:"ci_pipeline"`
-	InfraCode       map[string]string `json:"infra_code"` // Terraform, etc.
+	Dockerfile    string            `json:"dockerfile"`
+	DockerCompose string            `json:"docker_compose"`
+	KubeManifests map[string]string `json:"kube_manifests"`
+	HelmChart     map[string]string `json:"helm_chart"`
+	CIPipeline    string            `json:"ci_pipeline"`
+	InfraCode     map[string]string `json:"infra_code"` // Terraform, etc.
 
 	// Operations artifacts
 	MonitoringConfig map[string]interface{} `json:"monitoring_config"`
@@ -157,13 +163,66 @@ type ConsultancyState struct {
 	TestResults       map[string]interface{} `json:"test_results"`
 
 	// Status tracking
-	Errors        []string `json:"errors"`
-	Warnings      []string `json:"warnings"`
-	PhaseHistory  []string `json:"phase_history"`
-	CompletedAt   *time.Time `json:"completed_at"`
+	Errors       []string   `json:"errors"`
+	Warnings     []string   `json:"warnings"`
+	PhaseHistory []string   `json:"phase_history"`
+	CompletedAt  *time.Time `json:"completed_at"`
 
 	// Brownfield import status
 	BrownfieldStatus *BrownfieldStatus `json:"brownfield_status,omitempty"`
+
+	// Multi-agent orchestration (real-time)
+	DAG      *DAGState      `json:"dag,omitempty"`
+	Agents   []ActiveAgent  `json:"agents,omitempty"`
+	CIStatus *CIStatusState `json:"ci_status,omitempty"`
+}
+
+// DAGState represents the real-time state of the task graph
+type DAGState struct {
+	ID        string    `json:"id"`
+	ProjectID string    `json:"project_id"`
+	Tasks     []DAGTask `json:"tasks"`
+	Total     int       `json:"total"`
+	Completed int       `json:"completed"`
+	Failed    int       `json:"failed"`
+	Running   int       `json:"running"`
+	Pending   int       `json:"pending"`
+}
+
+// DAGTask represents a single task in the DAG
+type DAGTask struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description,omitempty"`
+	Type         string   `json:"type"`
+	Status       string   `json:"status"` // PENDING, READY, RUNNING, COMPLETED, FAILED, BLOCKED
+	Dependencies []string `json:"dependencies"`
+	AssignedTo   string   `json:"assigned_to,omitempty"`
+	Error        string   `json:"error,omitempty"`
+	RetryCount   int      `json:"retry_count,omitempty"`
+}
+
+// ActiveAgent represents a currently running agent
+type ActiveAgent struct {
+	TaskID    string `json:"task_id"`
+	AgentID   string `json:"agent_id"`
+	AgentName string `json:"agent_name"`
+	TaskName  string `json:"task_name"`
+	StartedAt string `json:"started_at"`
+}
+
+// CIStatusState represents real-time CI status
+type CIStatusState struct {
+	Stages []CIStageResult `json:"stages"`
+}
+
+// CIStageResult represents the result of a single CI stage
+type CIStageResult struct {
+	Stage      string `json:"stage"` // LINT, BUILD, TEST
+	Success    bool   `json:"success"`
+	Output     string `json:"output,omitempty"`
+	Error      string `json:"error,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
 }
 
 // ConsultancyWorkflow is the main workflow for end-to-end project delivery
@@ -180,7 +239,8 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 
 	// Initialize state
 	state := &ConsultancyState{
-		ProjectID:    workflow.GetInfo(ctx).WorkflowExecution.ID,
+		ProjectID:    config.ProjectID, // Use database UUID
+		WorkflowID:   workflow.GetInfo(ctx).WorkflowExecution.ID,
 		ProjectName:  config.ProjectName,
 		ClientID:     config.ClientID,
 		Phase:        PhaseIntake,
@@ -188,6 +248,22 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		UpdatedAt:    workflow.Now(ctx),
 		AllCodeFiles: make(map[string]string),
 		PhaseHistory: []string{string(PhaseIntake)},
+		DAG: &DAGState{
+			ID:        "dag_" + workflow.GetInfo(ctx).WorkflowExecution.ID,
+			ProjectID: workflow.GetInfo(ctx).WorkflowExecution.ID,
+			Tasks: []DAGTask{
+				{ID: "intake", Name: "Project Intake", Type: "discovery", Status: "RUNNING"},
+				{ID: "sizing", Name: "Complexity Sizing", Type: "planning", Status: "PENDING", Dependencies: []string{"intake"}},
+				{ID: "planning", Name: "Project Planning", Type: "planning", Status: "PENDING", Dependencies: []string{"sizing"}},
+				{ID: "architecture", Name: "System Architecture", Type: "design", Status: "PENDING", Dependencies: []string{"planning"}},
+				{ID: "development", Name: "Code Generation", Type: "development", Status: "PENDING", Dependencies: []string{"architecture"}},
+				{ID: "testing", Name: "Quality Assurance", Type: "testing", Status: "PENDING", Dependencies: []string{"development"}},
+				{ID: "deployment", Name: "Cloud Deployment", Type: "devops", Status: "PENDING", Dependencies: []string{"testing"}},
+			},
+			Total:   7,
+			Pending: 6,
+			Running: 1,
+		},
 	}
 
 	// Activity options
@@ -332,7 +408,11 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 		state.ChatHistory = "User: " + config.InitialMessage
 
 		var reply string
-		err := workflow.ExecuteActivity(ctxShort, "PMAgentChat", state.ChatHistory).Get(ctx, &reply)
+		chatInput := activities.ChatInput{
+			ProjectID:   state.ProjectID,
+			ChatHistory: state.ChatHistory,
+		}
+		err := workflow.ExecuteActivity(ctxShort, "PMAgentChat", chatInput).Get(ctx, &reply)
 		if err != nil {
 			logger.Warn("PM Agent chat failed", "Error", err)
 			state.Errors = append(state.Errors, fmt.Sprintf("PM chat error: %v", err))
@@ -353,7 +433,11 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 			state.ChatHistory += "\nUser: " + signal.Message
 
 			var reply string
-			err := workflow.ExecuteActivity(ctxShort, "PMAgentChat", state.ChatHistory).Get(ctx, &reply)
+			chatInput := activities.ChatInput{
+				ProjectID:   state.ProjectID,
+				ChatHistory: state.ChatHistory,
+			}
+			err := workflow.ExecuteActivity(ctxShort, "PMAgentChat", chatInput).Get(ctx, &reply)
 			if err != nil {
 				logger.Error("PM Agent chat failed", "Error", err)
 				state.Errors = append(state.Errors, fmt.Sprintf("PM chat error: %v", err))
@@ -424,10 +508,10 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 
 	// Create project plan
 	planInput := map[string]interface{}{
-		"description":    state.ChatHistory,
-		"effort":         state.EffortEstimate,
-		"methodology":    "agile",
-		"sprint_length":  14,
+		"description":   state.ChatHistory,
+		"effort":        state.EffortEstimate,
+		"methodology":   "agile",
+		"sprint_length": 14,
 	}
 	if reqResult != nil {
 		planInput["requirements"] = reqResult
@@ -478,8 +562,8 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 
 	// Select tech stack
 	techInput := map[string]interface{}{
-		"requirements":      state.Requirements,
-		"system_design":     state.SystemDesign,
+		"requirements":       state.Requirements,
+		"system_design":      state.SystemDesign,
 		"preferred_frontend": config.PreferredFrontend,
 		"preferred_backend":  config.PreferredBackend,
 		"preferred_database": config.PreferredDatabase,
@@ -552,7 +636,21 @@ API Specification:
 
 Build a modern, responsive frontend application.`, config.ProjectName, frontendTech, state.ChatHistory, state.APISpec)
 
-	frontendFuture := workflow.ExecuteActivity(ctxLong, "DevAgentGenerate", frontendSpec)
+	genInput := activities.GenerateCodeInput{
+		ProjectID: state.ProjectID,
+		Spec:      frontendSpec,
+	}
+
+	// Track agents
+	state.Agents = append(state.Agents, ActiveAgent{
+		TaskID:    "frontend",
+		AgentID:   "dev-frontend",
+		AgentName: "Dev Agent",
+		TaskName:  "Frontend Development",
+		StartedAt: workflow.Now(ctx).Format(time.RFC3339),
+	})
+
+	frontendFuture := workflow.ExecuteActivity(ctxLong, "DevAgentGenerate", genInput)
 	selector.AddFuture(frontendFuture, func(f workflow.Future) {
 		var result map[string]string
 		frontendErr = f.Get(ctx, &result)
@@ -562,13 +660,15 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 				state.AllCodeFiles[k] = v
 			}
 		}
+		// Remove agent
+		state.Agents = filterAgents(state.Agents, "frontend")
 	})
 
 	// Backend development (if full stack)
 	if config.EnableFullStack {
 		backendInput := map[string]interface{}{
-			"project_name":    config.ProjectName,
-			"requirements":    state.ChatHistory,
+			"project_name": config.ProjectName,
+			"requirements": state.ChatHistory,
 			"tech_stack": map[string]interface{}{
 				"backend":  backendTech,
 				"database": databaseTech,
@@ -576,6 +676,22 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 			"database_schema": state.DatabaseSchema,
 			"api_spec":        state.APISpec,
 		}
+
+		// Track agents
+		state.Agents = append(state.Agents, ActiveAgent{
+			TaskID:    "backend",
+			AgentID:   "dev-backend",
+			AgentName: "Backend Agent",
+			TaskName:  "Backend Development",
+			StartedAt: workflow.Now(ctx).Format(time.RFC3339),
+		})
+		state.Agents = append(state.Agents, ActiveAgent{
+			TaskID:    "database",
+			AgentID:   "dev-db",
+			AgentName: "Database Agent",
+			TaskName:  "Schema Migrations",
+			StartedAt: workflow.Now(ctx).Format(time.RFC3339),
+		})
 
 		backendFuture := workflow.ExecuteActivity(ctxLong, "BackendGenerate", backendInput)
 		selector.AddFuture(backendFuture, func(f workflow.Future) {
@@ -587,6 +703,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 					state.AllCodeFiles["backend/"+k] = v
 				}
 			}
+			state.Agents = filterAgents(state.Agents, "backend")
 		})
 
 		// Database migrations
@@ -612,11 +729,12 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 					state.AllCodeFiles["database/"+k] = v
 				}
 			}
+			state.Agents = filterAgents(state.Agents, "database")
 		})
 	}
 
 	// Wait for all development activities
-	for i := 0; i < 1 + boolToInt(config.EnableFullStack)*2; i++ {
+	for i := 0; i < 1+boolToInt(config.EnableFullStack)*2; i++ {
 		selector.Select(ctx)
 	}
 
@@ -726,32 +844,40 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 	// Generate integration tests
 	integrationInput := map[string]interface{}{
-		"services":        []string{"api", "database"},
-		"backend_type":    backendTech,
-		"database_type":   databaseTech,
-		"api_spec":        state.APISpec,
+		"stack":         backendTech,
+		"framework":     getString(state.TechStack, "backend_framework", ""),
+		"database_type": databaseTech,
+		"api_spec":      state.APISpec,
+		"code_files":    state.BackendCode,
 	}
 
-	var integrationTests map[string]string
-	if err := workflow.ExecuteActivity(ctxMedium, "QAGenerateIntegrationTests", integrationInput).Get(ctx, &integrationTests); err != nil {
+	var integrationBundle activities.TestBundle
+	if err := workflow.ExecuteActivity(ctxMedium, "QAGenerateIntegrationTests", integrationInput).Get(ctx, &integrationBundle); err != nil {
 		logger.Warn("Integration test generation failed", "Error", err)
 	} else {
-		state.IntegrationTests = integrationTests
+		state.IntegrationTests = integrationBundle.Files
+		for k, v := range integrationBundle.Files {
+			state.AllCodeFiles["tests/integration/"+k] = v
+		}
 	}
 
 	// Generate E2E tests
 	e2eInput := map[string]interface{}{
-		"requirements":    state.Requirements,
-		"frontend_type":   frontendTech,
-		"api_spec":        state.APISpec,
-		"test_framework":  "playwright",
+		"framework":  "playwright",
+		"base_url":   "http://localhost:3000",
+		"code_files": state.FrontendCode,
+		"user_flows": []string{"Landing page renders", "Core functionality works"},
+		"api_spec":   state.APISpec,
 	}
 
-	var e2eTests map[string]string
-	if err := workflow.ExecuteActivity(ctxMedium, "QAGenerateE2ETests", e2eInput).Get(ctx, &e2eTests); err != nil {
+	var e2eBundle activities.TestBundle
+	if err := workflow.ExecuteActivity(ctxMedium, "QAGenerateE2ETests", e2eInput).Get(ctx, &e2eBundle); err != nil {
 		logger.Warn("E2E test generation failed", "Error", err)
 	} else {
-		state.E2ETests = e2eTests
+		state.E2ETests = e2eBundle.Files
+		for k, v := range e2eBundle.Files {
+			state.AllCodeFiles["tests/e2e/"+k] = v
+		}
 	}
 
 	// Run tests with Three-Strike Rule
@@ -806,10 +932,10 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 	// Analyze test coverage
 	coverageInput := map[string]interface{}{
-		"code_files":         filterNonTestFiles(state.AllCodeFiles),
-		"test_files":         filterTestFiles(state.AllCodeFiles),
-		"integration_tests":  state.IntegrationTests,
-		"e2e_tests":          state.E2ETests,
+		"code_files":        filterNonTestFiles(state.AllCodeFiles),
+		"test_files":        filterTestFiles(state.AllCodeFiles),
+		"integration_tests": state.IntegrationTests,
+		"e2e_tests":         state.E2ETests,
 	}
 
 	if err := workflow.ExecuteActivity(ctxMedium, "QAAnalyzeTestCoverage", coverageInput).Get(ctx, &state.TestCoverage); err != nil {
@@ -965,9 +1091,9 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 		// Generate monitoring config
 		monitorInput := map[string]interface{}{
-			"app_name":       state.ProjectName,
-			"metrics":        []string{"http_requests", "latency", "errors", "cpu", "memory"},
-			"platform":       "prometheus",
+			"app_name": state.ProjectName,
+			"metrics":  []string{"http_requests", "latency", "errors", "cpu", "memory"},
+			"platform": "prometheus",
 		}
 
 		if err := workflow.ExecuteActivity(ctxMedium, "SREGenerateMonitoring", monitorInput).Get(ctx, &state.MonitoringConfig); err != nil {
@@ -990,9 +1116,9 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 		// Generate dashboards
 		dashInput := map[string]interface{}{
-			"app_name":   state.ProjectName,
+			"app_name":       state.ProjectName,
 			"dashboard_type": "overview",
-			"platform":   "grafana",
+			"platform":       "grafana",
 		}
 
 		if err := workflow.ExecuteActivity(ctxMedium, "SREGenerateDashboards", dashInput).Get(ctx, &state.Dashboards); err != nil {
@@ -1001,7 +1127,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 		// Generate runbooks
 		runbookInput := map[string]interface{}{
-			"services": []string{state.ProjectName + "-api", state.ProjectName + "-frontend"},
+			"services":  []string{state.ProjectName + "-api", state.ProjectName + "-frontend"},
 			"scenarios": []string{"high_latency", "high_error_rate", "database_connection", "out_of_memory"},
 		}
 
@@ -1056,6 +1182,30 @@ func transitionPhase(state *ConsultancyState, phase ConsultancyPhase) {
 	state.Phase = phase
 	state.PhaseHistory = append(state.PhaseHistory, string(phase))
 	state.UpdatedAt = time.Now()
+
+	// Update DAG if present
+	if state.DAG != nil {
+		currentTaskID := strings.ToLower(string(phase))
+		found := false
+		state.DAG.Completed = 0
+		state.DAG.Running = 0
+		state.DAG.Pending = 0
+
+		for i := range state.DAG.Tasks {
+			t := &state.DAG.Tasks[i]
+			if t.ID == currentTaskID {
+				t.Status = "RUNNING"
+				state.DAG.Running++
+				found = true
+			} else if !found {
+				t.Status = "COMPLETED"
+				state.DAG.Completed++
+			} else {
+				t.Status = "PENDING"
+				state.DAG.Pending++
+			}
+		}
+	}
 }
 
 // transitionPhaseWithDB transitions the phase and updates the database
@@ -1069,10 +1219,14 @@ func transitionPhaseWithDB(ctx workflow.Context, state *ConsultancyState, phase 
 	actCtx := workflow.WithActivityOptions(ctx, ao)
 
 	// Execute and wait for result (database update is fast)
-	err := workflow.ExecuteActivity(actCtx, "ProjectUpdatePhase", map[string]string{
-		"workflow_id": state.ProjectID,
-		"phase":       string(phase),
-	}).Get(ctx, nil)
+	// Use the explicit UpdatePhaseParams matching the activity definition
+	params := activities.UpdatePhaseParams{
+		ProjectID:  state.ProjectID,
+		WorkflowID: state.WorkflowID,
+		Phase:      string(phase),
+	}
+
+	err := workflow.ExecuteActivity(actCtx, "ProjectUpdatePhase", params).Get(ctx, nil)
 	if err != nil {
 		// Log but don't fail the workflow for DB update issues
 		workflow.GetLogger(ctx).Warn("Failed to update project phase in database", "error", err)
@@ -1117,6 +1271,16 @@ func filterNonTestFiles(files map[string]string) map[string]string {
 	for k, v := range files {
 		if !isTestFile(k) {
 			result[k] = v
+		}
+	}
+	return result
+}
+
+func filterAgents(agents []ActiveAgent, taskID string) []ActiveAgent {
+	result := make([]ActiveAgent, 0)
+	for _, a := range agents {
+		if a.TaskID != taskID {
+			result = append(result, a)
 		}
 	}
 	return result

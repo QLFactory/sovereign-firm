@@ -81,19 +81,25 @@ const defaultPackageJson = {
     react: "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
-    "axios": "^1.6.0",
-    "zustand": "^4.5.0",
+    axios: "^1.6.0",
+    zustand: "^4.5.0",
     "lucide-react": "^0.344.0",
-    "clsx": "^2.1.0",
+    "framer-motion": "^11.0.8",
+    clsx: "^2.1.0",
     "tailwind-merge": "^2.2.0",
+    jspdf: "^2.5.1",
+    recharts: "^2.12.0",
+    "react-icons": "^5.0.1",
+    "react-query": "^3.39.3",
+    "@tanstack/react-query": "^5.28.4",
   },
   devDependencies: {
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^14.2.1",
     "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
+    autoprefixer: "^10.4.17",
+    postcss: "^8.4.35",
+    tailwindcss: "^3.4.1",
     jsdom: "^24.0.0",
     vite: "^5.1.0",
     vitest: "^1.3.1",
@@ -190,12 +196,14 @@ const defaultIndexHtml = `<!DOCTYPE html>
 // Default main.jsx
 const defaultMainJsx = `import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>
 )`;
 
@@ -554,32 +562,29 @@ export default function WebContainerPreview({
         <div className="flex">
           <button
             onClick={() => setActiveTab("preview")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "preview"
-                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
-                : "text-zinc-500 border-transparent hover:text-zinc-300"
-            }`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "preview"
+              ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+              : "text-zinc-500 border-transparent hover:text-zinc-300"
+              }`}
           >
             Preview
           </button>
           <button
             onClick={() => setActiveTab("files")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "files"
-                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
-                : "text-zinc-500 border-transparent hover:text-zinc-300"
-            }`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "files"
+              ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+              : "text-zinc-500 border-transparent hover:text-zinc-300"
+              }`}
           >
             Files
             <span className="ml-1.5 text-xs text-zinc-600">({fileCount})</span>
           </button>
           <button
             onClick={() => setActiveTab("console")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "console"
-                ? "text-blue-400 border-blue-400 bg-zinc-800/50"
-                : "text-zinc-500 border-transparent hover:text-zinc-300"
-            }`}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "console"
+              ? "text-blue-400 border-blue-400 bg-zinc-800/50"
+              : "text-zinc-500 border-transparent hover:text-zinc-300"
+              }`}
           >
             Console
           </button>
@@ -588,17 +593,15 @@ export default function WebContainerPreview({
         {/* Status and actions */}
         <div className="flex items-center gap-2 px-3">
           <div
-            className={`w-2 h-2 rounded-full ${
-              url ? "bg-green-500" : "bg-yellow-500 animate-pulse"
-            }`}
+            className={`w-2 h-2 rounded-full ${url ? "bg-green-500" : "bg-yellow-500 animate-pulse"
+              }`}
           />
           <span className="text-xs text-zinc-500">{status}</span>
 
           {/* Test results badge */}
           {testResults && (
-            <span className={`px-2 py-0.5 rounded text-xs ${
-              testResults.includes("✅") ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
-            }`}>
+            <span className={`px-2 py-0.5 rounded text-xs ${testResults.includes("✅") ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"
+              }`}>
               {testResults}
             </span>
           )}
@@ -619,11 +622,10 @@ export default function WebContainerPreview({
             <button
               onClick={runTests}
               disabled={isRunningTests}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                isRunningTests
-                  ? "bg-zinc-700 text-zinc-400 cursor-wait"
-                  : "bg-purple-600 hover:bg-purple-500 text-white"
-              }`}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${isRunningTests
+                ? "bg-zinc-700 text-zinc-400 cursor-wait"
+                : "bg-purple-600 hover:bg-purple-500 text-white"
+                }`}
             >
               {isRunningTests ? "Running..." : "🧪 Run Tests"}
             </button>
@@ -690,15 +692,14 @@ export default function WebContainerPreview({
               consoleOutput.map((line, i) => (
                 <div
                   key={i}
-                  className={`whitespace-pre-wrap ${
-                    line.includes("error") || line.includes("Error") || line.includes("ERR")
-                      ? "text-red-400"
-                      : line.includes("warning") || line.includes("WARN")
+                  className={`whitespace-pre-wrap ${line.includes("error") || line.includes("Error") || line.includes("ERR")
+                    ? "text-red-400"
+                    : line.includes("warning") || line.includes("WARN")
                       ? "text-yellow-400"
                       : line.includes("✅") || line.includes("success")
-                      ? "text-green-400"
-                      : "text-zinc-400"
-                  }`}
+                        ? "text-green-400"
+                        : "text-zinc-400"
+                    }`}
                 >
                   {line}
                 </div>

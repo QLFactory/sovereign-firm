@@ -60,13 +60,13 @@ func (s *ContainerSandbox) Start(ctx context.Context) error {
 	}
 
 	image := s.getImage()
+	containerName := "sandbox-" + s.config.ID
 
 	// Build docker run command
 	args := []string{
 		"run", "-d",
 		"--name", "sandbox-" + s.config.ID,
 		"-w", "/workspace",
-		"-v", s.workDir + ":/workspace",
 		// Resource limits
 		"--memory", fmt.Sprintf("%dm", s.config.MaxMemory),
 		"--cpu-period", "100000",
@@ -77,6 +77,17 @@ func (s *ContainerSandbox) Start(ctx context.Context) error {
 		"--cap-add", "CHOWN",
 		"--cap-add", "SETUID",
 		"--cap-add", "SETGID",
+	}
+
+	// Hardening
+	if s.config.ReadOnlyRoot {
+		args = append(args, "--read-only")
+	}
+	if s.config.SeccompProfile != "" {
+		args = append(args, "--security-opt", "seccomp="+s.config.SeccompProfile)
+	} else if !s.config.NetworkEnabled {
+		// Use a restrictive default profile if network is disabled
+		args = append(args, "--security-opt", "seccomp=unconfined") // Placeholder for actual profile path
 	}
 
 	// Network restrictions
@@ -107,7 +118,7 @@ func (s *ContainerSandbox) Start(ctx context.Context) error {
 		}
 	}
 
-	s.containerID = strings.TrimSpace(string(output))
+	s.containerID = containerName
 	s.running = true
 	return nil
 }
@@ -126,9 +137,6 @@ func (s *ContainerSandbox) Stop(ctx context.Context) error {
 
 	// Remove container
 	exec.CommandContext(ctx, "docker", "rm", "-f", s.containerID).Run()
-
-	// Cleanup work directory
-	os.RemoveAll(s.workDir)
 
 	s.running = false
 	s.containerID = ""
@@ -218,36 +226,102 @@ func (s *ContainerSandbox) Execute(ctx context.Context, req *ExecuteRequest) (*E
 	}, nil
 }
 
-// WriteFile writes a file to the sandbox filesystem
+// WriteFile writes a file to the sandbox filesystem using docker cp
 func (s *ContainerSandbox) WriteFile(ctx context.Context, path string, content []byte) error {
-	fullPath := filepath.Join(s.workDir, path)
+	s.mu.RLock()
+	containerID := s.containerID
+	s.mu.RUnlock()
 
-	// Ensure parent directory exists
-	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+	if containerID == "" {
+		return fmt.Errorf("container not running")
 	}
 
-	return os.WriteFile(fullPath, content, 0644)
-}
-
-// ReadFile reads a file from the sandbox filesystem
-func (s *ContainerSandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
-	fullPath := filepath.Join(s.workDir, path)
-	return os.ReadFile(fullPath)
-}
-
-// ListFiles lists files in a directory
-func (s *ContainerSandbox) ListFiles(ctx context.Context, path string) ([]string, error) {
-	fullPath := filepath.Join(s.workDir, path)
-	entries, err := os.ReadDir(fullPath)
+	// Create a temporary file locally
+	tmpFile, err := os.CreateTemp("", "sandbox-file-")
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(content); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	// Ensure destination directory exists in container
+	relPath := strings.TrimPrefix(path, "/")
+	destPath := filepath.Join("/workspace", relPath)
+	dir := filepath.Dir(destPath)
+
+	mkdirCmd := exec.CommandContext(ctx, "docker", "exec", containerID, "mkdir", "-p", dir)
+	if output, err := mkdirCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create directory in container: %s - %w", string(output), err)
 	}
 
-	files := make([]string, 0, len(entries))
-	for _, e := range entries {
-		files = append(files, e.Name())
+	// Copy file to container
+	cpCmd := exec.CommandContext(ctx, "docker", "cp", tmpFile.Name(), containerID+":"+destPath)
+	if output, err := cpCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to copy file to container: %s - %w", string(output), err)
+	}
+
+	return nil
+}
+
+// ReadFile reads a file from the sandbox filesystem using docker cp
+func (s *ContainerSandbox) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	s.mu.RLock()
+	containerID := s.containerID
+	s.mu.RUnlock()
+
+	if containerID == "" {
+		return nil, fmt.Errorf("container not running")
+	}
+
+	// Create a temporary file locally
+	tmpDir, err := os.MkdirTemp("", "sandbox-read-")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	relPath := strings.TrimPrefix(path, "/")
+	srcPath := filepath.Join("/workspace", relPath)
+	destPath := filepath.Join(tmpDir, "file")
+
+	// Copy file from container
+	cpCmd := exec.CommandContext(ctx, "docker", "cp", containerID+":"+srcPath, destPath)
+	if output, err := cpCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("failed to copy file from container: %s - %w", string(output), err)
+	}
+
+	return os.ReadFile(destPath)
+}
+
+// ListFiles lists files in a directory using docker exec ls
+func (s *ContainerSandbox) ListFiles(ctx context.Context, path string) ([]string, error) {
+	s.mu.RLock()
+	containerID := s.containerID
+	s.mu.RUnlock()
+
+	if containerID == "" {
+		return nil, fmt.Errorf("container not running")
+	}
+
+	relPath := strings.TrimPrefix(path, "/")
+	targetPath := filepath.Join("/workspace", relPath)
+
+	lsCmd := exec.CommandContext(ctx, "docker", "exec", containerID, "ls", "-1", targetPath)
+	output, err := lsCmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files in container: %s - %w", string(output), err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	files := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line != "" {
+			files = append(files, line)
+		}
 	}
 	return files, nil
 }

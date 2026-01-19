@@ -28,22 +28,22 @@ func NewSREAgent() *SREAgent {
 
 // MonitoringConfig represents the complete monitoring configuration
 type MonitoringConfig struct {
-	Platform       string              `json:"platform"`        // "prometheus", "datadog", "cloudwatch"
-	ServiceName    string              `json:"service_name"`
-	Metrics        []MetricDefinition  `json:"metrics"`
-	ScrapeConfigs  []ScrapeConfig      `json:"scrape_configs,omitempty"`
-	RecordingRules []RecordingRule     `json:"recording_rules,omitempty"`
-	Labels         map[string]string   `json:"labels,omitempty"`
-	Files          map[string]string   `json:"files"`
+	Platform       string             `json:"platform"` // "prometheus", "datadog", "cloudwatch"
+	ServiceName    string             `json:"service_name"`
+	Metrics        []MetricDefinition `json:"metrics"`
+	ScrapeConfigs  []ScrapeConfig     `json:"scrape_configs,omitempty"`
+	RecordingRules []RecordingRule    `json:"recording_rules,omitempty"`
+	Labels         map[string]string  `json:"labels,omitempty"`
+	Files          map[string]string  `json:"files"`
 }
 
 // MetricDefinition defines a metric to be collected
 type MetricDefinition struct {
-	Name        string            `json:"name"`
-	Type        string            `json:"type"`        // "counter", "gauge", "histogram", "summary"
-	Description string            `json:"description"`
-	Labels      []string          `json:"labels,omitempty"`
-	Buckets     []float64         `json:"buckets,omitempty"` // for histograms
+	Name        string              `json:"name"`
+	Type        string              `json:"type"` // "counter", "gauge", "histogram", "summary"
+	Description string              `json:"description"`
+	Labels      []string            `json:"labels,omitempty"`
+	Buckets     []float64           `json:"buckets,omitempty"`    // for histograms
 	Objectives  map[float64]float64 `json:"objectives,omitempty"` // for summaries
 }
 
@@ -72,10 +72,10 @@ type RecordingRule struct {
 
 // AlertRules represents alert configuration
 type AlertRules struct {
-	Platform    string       `json:"platform"`     // "prometheus", "datadog", "cloudwatch", "pagerduty"
-	ServiceName string       `json:"service_name"`
-	SLOs        []SLO        `json:"slos"`
-	Alerts      []AlertRule  `json:"alerts"`
+	Platform    string            `json:"platform"` // "prometheus", "datadog", "cloudwatch", "pagerduty"
+	ServiceName string            `json:"service_name"`
+	SLOs        []SLO             `json:"slos"`
+	Alerts      []AlertRule       `json:"alerts"`
 	Files       map[string]string `json:"files"`
 }
 
@@ -83,28 +83,28 @@ type AlertRules struct {
 type SLO struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	Target      float64 `json:"target"`      // e.g., 99.9 for 99.9%
-	Window      string  `json:"window"`      // e.g., "30d", "7d"
-	Indicator   string  `json:"indicator"`   // "availability", "latency", "error_rate", "throughput"
-	Query       string  `json:"query"`       // The metric query
+	Target      float64 `json:"target"`    // e.g., 99.9 for 99.9%
+	Window      string  `json:"window"`    // e.g., "30d", "7d"
+	Indicator   string  `json:"indicator"` // "availability", "latency", "error_rate", "throughput"
+	Query       string  `json:"query"`     // The metric query
 }
 
 // AlertRule defines an alert
 type AlertRule struct {
 	Name        string            `json:"name"`
-	Severity    string            `json:"severity"`    // "critical", "warning", "info"
-	Condition   string            `json:"condition"`   // The alert expression
-	Duration    string            `json:"duration"`    // How long before firing
+	Severity    string            `json:"severity"`  // "critical", "warning", "info"
+	Condition   string            `json:"condition"` // The alert expression
+	Duration    string            `json:"duration"`  // How long before firing
 	Summary     string            `json:"summary"`
 	Description string            `json:"description"`
-	Runbook     string            `json:"runbook,omitempty"`     // Link to runbook
+	Runbook     string            `json:"runbook,omitempty"` // Link to runbook
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // DashboardBundle contains generated dashboards
 type DashboardBundle struct {
-	Platform    string            `json:"platform"`    // "grafana", "datadog", "cloudwatch"
+	Platform    string            `json:"platform"` // "grafana", "datadog", "cloudwatch"
 	ServiceName string            `json:"service_name"`
 	Dashboards  []Dashboard       `json:"dashboards"`
 	Files       map[string]string `json:"files"`
@@ -112,25 +112,25 @@ type DashboardBundle struct {
 
 // Dashboard represents a monitoring dashboard
 type Dashboard struct {
-	Name        string          `json:"name"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	Tags        []string        `json:"tags,omitempty"`
+	Name        string           `json:"name"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	Tags        []string         `json:"tags,omitempty"`
 	Panels      []DashboardPanel `json:"panels"`
-	Variables   []DashboardVar  `json:"variables,omitempty"`
-	Refresh     string          `json:"refresh,omitempty"`
-	TimeRange   string          `json:"time_range,omitempty"`
+	Variables   []DashboardVar   `json:"variables,omitempty"`
+	Refresh     string           `json:"refresh,omitempty"`
+	TimeRange   string           `json:"time_range,omitempty"`
 }
 
 // DashboardPanel represents a panel in a dashboard
 type DashboardPanel struct {
-	Title       string   `json:"title"`
-	Type        string   `json:"type"`        // "graph", "stat", "gauge", "table", "heatmap", "logs"
-	Query       string   `json:"query"`
-	Description string   `json:"description,omitempty"`
-	Unit        string   `json:"unit,omitempty"`
+	Title       string      `json:"title"`
+	Type        string      `json:"type"` // "graph", "stat", "gauge", "table", "heatmap", "logs"
+	Query       string      `json:"query"`
+	Description string      `json:"description,omitempty"`
+	Unit        string      `json:"unit,omitempty"`
 	Thresholds  []Threshold `json:"thresholds,omitempty"`
-	GridPos     GridPos  `json:"grid_pos,omitempty"`
+	GridPos     GridPos     `json:"grid_pos,omitempty"`
 }
 
 // Threshold defines visual thresholds
@@ -151,7 +151,7 @@ type GridPos struct {
 type DashboardVar struct {
 	Name    string   `json:"name"`
 	Label   string   `json:"label"`
-	Type    string   `json:"type"`    // "query", "custom", "constant", "interval"
+	Type    string   `json:"type"` // "query", "custom", "constant", "interval"
 	Query   string   `json:"query,omitempty"`
 	Options []string `json:"options,omitempty"`
 	Default string   `json:"default,omitempty"`
@@ -159,21 +159,21 @@ type DashboardVar struct {
 
 // RunbookBundle contains generated runbooks
 type RunbookBundle struct {
-	ServiceName string    `json:"service_name"`
-	Runbooks    []Runbook `json:"runbooks"`
+	ServiceName string            `json:"service_name"`
+	Runbooks    []Runbook         `json:"runbooks"`
 	Files       map[string]string `json:"files"`
 }
 
 // Runbook represents an operational runbook
 type Runbook struct {
-	Name           string         `json:"name"`
-	Title          string         `json:"title"`
-	Description    string         `json:"description"`
-	AlertName      string         `json:"alert_name,omitempty"`
-	Severity       string         `json:"severity"`
-	Impact         string         `json:"impact"`
-	Symptoms       []string       `json:"symptoms"`
-	PossibleCauses []string       `json:"possible_causes"`
+	Name            string        `json:"name"`
+	Title           string        `json:"title"`
+	Description     string        `json:"description"`
+	AlertName       string        `json:"alert_name,omitempty"`
+	Severity        string        `json:"severity"`
+	Impact          string        `json:"impact"`
+	Symptoms        []string      `json:"symptoms"`
+	PossibleCauses  []string      `json:"possible_causes"`
 	DiagnosticSteps []RunbookStep `json:"diagnostic_steps"`
 	ResolutionSteps []RunbookStep `json:"resolution_steps"`
 	EscalationPath  []string      `json:"escalation_path"`
@@ -192,16 +192,16 @@ type RunbookStep struct {
 
 // IncidentAnalysis represents the analysis of an incident
 type IncidentAnalysis struct {
-	IncidentID      string             `json:"incident_id"`
-	Summary         string             `json:"summary"`
-	Severity        string             `json:"severity"`
-	Timeline        []TimelineEvent    `json:"timeline"`
-	RootCause       string             `json:"root_cause"`
-	Contributing    []string           `json:"contributing_factors"`
-	Impact          ImpactAssessment   `json:"impact"`
-	Resolution      string             `json:"resolution"`
-	Recommendations []Recommendation   `json:"recommendations"`
-	LessonsLearned  []string           `json:"lessons_learned"`
+	IncidentID      string           `json:"incident_id"`
+	Summary         string           `json:"summary"`
+	Severity        string           `json:"severity"`
+	Timeline        []TimelineEvent  `json:"timeline"`
+	RootCause       string           `json:"root_cause"`
+	Contributing    []string         `json:"contributing_factors"`
+	Impact          ImpactAssessment `json:"impact"`
+	Resolution      string           `json:"resolution"`
+	Recommendations []Recommendation `json:"recommendations"`
+	LessonsLearned  []string         `json:"lessons_learned"`
 }
 
 // TimelineEvent represents an event in incident timeline
@@ -232,11 +232,11 @@ type Recommendation struct {
 
 // OnCallConfig represents on-call configuration
 type OnCallConfig struct {
-	Platform    string           `json:"platform"` // "pagerduty", "opsgenie", "victorops"
-	ServiceName string           `json:"service_name"`
-	Schedules   []OnCallSchedule `json:"schedules"`
+	Platform    string             `json:"platform"` // "pagerduty", "opsgenie", "victorops"
+	ServiceName string             `json:"service_name"`
+	Schedules   []OnCallSchedule   `json:"schedules"`
 	Policies    []EscalationPolicy `json:"policies"`
-	Files       map[string]string `json:"files"`
+	Files       map[string]string  `json:"files"`
 }
 
 // OnCallSchedule defines an on-call rotation
@@ -251,9 +251,9 @@ type OnCallSchedule struct {
 
 // EscalationPolicy defines escalation rules
 type EscalationPolicy struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Rules       []EscalationRule  `json:"rules"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Rules       []EscalationRule `json:"rules"`
 }
 
 // EscalationRule defines a single escalation step
@@ -270,40 +270,40 @@ type EscalationRule struct {
 
 // MonitoringInput for GenerateMonitoringConfig
 type MonitoringInput struct {
-	ServiceName  string            `json:"service_name"`
-	Platform     string            `json:"platform"`     // "prometheus", "datadog", "cloudwatch"
-	TechStack    *TechStack        `json:"tech_stack,omitempty"`
-	Endpoints    []string          `json:"endpoints,omitempty"`
-	CustomMetrics []string         `json:"custom_metrics,omitempty"`
-	Labels       map[string]string `json:"labels,omitempty"`
+	ServiceName   string            `json:"service_name"`
+	Platform      string            `json:"platform"` // "prometheus", "datadog", "cloudwatch"
+	TechStack     *TechStack        `json:"tech_stack,omitempty"`
+	Endpoints     []string          `json:"endpoints,omitempty"`
+	CustomMetrics []string          `json:"custom_metrics,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
 }
 
 // AlertInput for GenerateAlertRules
 type AlertInput struct {
-	ServiceName string     `json:"service_name"`
-	Platform    string     `json:"platform"`
-	SLOs        []SLO      `json:"slos,omitempty"`
-	Metrics     []string   `json:"metrics,omitempty"`
+	ServiceName string             `json:"service_name"`
+	Platform    string             `json:"platform"`
+	SLOs        []SLO              `json:"slos,omitempty"`
+	Metrics     []string           `json:"metrics,omitempty"`
 	Thresholds  map[string]float64 `json:"thresholds,omitempty"`
 }
 
 // DashboardInput for GenerateDashboards
 type DashboardInput struct {
-	ServiceName string            `json:"service_name"`
-	Platform    string            `json:"platform"`    // "grafana", "datadog", "cloudwatch"
-	Metrics     []string          `json:"metrics,omitempty"`
-	SLOs        []SLO             `json:"slos,omitempty"`
-	TechStack   *TechStack        `json:"tech_stack,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
+	ServiceName string     `json:"service_name"`
+	Platform    string     `json:"platform"` // "grafana", "datadog", "cloudwatch"
+	Metrics     []string   `json:"metrics,omitempty"`
+	SLOs        []SLO      `json:"slos,omitempty"`
+	TechStack   *TechStack `json:"tech_stack,omitempty"`
+	Tags        []string   `json:"tags,omitempty"`
 }
 
 // RunbookInput for GenerateRunbooks
 type RunbookInput struct {
-	ServiceName    string       `json:"service_name"`
-	Alerts         []AlertRule  `json:"alerts,omitempty"`
-	Architecture   string       `json:"architecture,omitempty"`
-	Dependencies   []string     `json:"dependencies,omitempty"`
-	CommonIssues   []string     `json:"common_issues,omitempty"`
+	ServiceName  string      `json:"service_name"`
+	Alerts       []AlertRule `json:"alerts,omitempty"`
+	Architecture string      `json:"architecture,omitempty"`
+	Dependencies []string    `json:"dependencies,omitempty"`
+	CommonIssues []string    `json:"common_issues,omitempty"`
 }
 
 // IncidentInput for AnalyzeIncident
@@ -990,7 +990,7 @@ func (a *SREAgent) generateDatadogConfig(config MonitoringConfig) string {
 	sb.WriteString("process_config:\n")
 	sb.WriteString("  enabled: true\n\n")
 
-	sb.WriteString(fmt.Sprintf("tags:\n"))
+	sb.WriteString("tags:\n")
 	sb.WriteString(fmt.Sprintf("  - service:%s\n", config.ServiceName))
 	for k, v := range config.Labels {
 		sb.WriteString(fmt.Sprintf("  - %s:%s\n", k, v))
@@ -1065,8 +1065,8 @@ func (a *SREAgent) generateDatadogMonitors(rules AlertRules) string {
 			"message": fmt.Sprintf("%s\n\n%s", alert.Summary, alert.Description),
 			"tags":    []string{fmt.Sprintf("service:%s", rules.ServiceName), fmt.Sprintf("severity:%s", alert.Severity)},
 			"options": map[string]interface{}{
-				"notify_no_data":    false,
-				"renotify_interval": 60,
+				"notify_no_data":     false,
+				"renotify_interval":  60,
 				"escalation_message": alert.Description,
 			},
 		}
@@ -1431,10 +1431,10 @@ func (a *SREAgent) generateOpsgenieSchedules(config OnCallConfig) string {
 			"enabled":  true,
 			"rotations": []map[string]interface{}{
 				{
-					"name":        "Primary Rotation",
-					"startDate":   schedule.StartTime,
-					"type":        schedule.RotationType,
-					"length":      1,
+					"name":         "Primary Rotation",
+					"startDate":    schedule.StartTime,
+					"type":         schedule.RotationType,
+					"length":       1,
 					"participants": formatOpsgenieParticipants(schedule.Participants),
 				},
 			},

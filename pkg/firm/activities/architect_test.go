@@ -701,7 +701,7 @@ func TestEmptyDesign(t *testing.T) {
 		t.Fatalf("Failed to unmarshal empty SystemDesign: %v", err)
 	}
 
-	if unmarshaled.Components != nil && len(unmarshaled.Components) != 0 {
+	if len(unmarshaled.Components) != 0 {
 		t.Error("Empty design should have nil or empty components")
 	}
 }

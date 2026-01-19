@@ -48,7 +48,7 @@ func TestCodeBundleType(t *testing.T) {
 }
 
 func TestRefineInputStructure(t *testing.T) {
-	input := RefineInput{
+	input := RefineCodeInput{
 		CurrentCode: map[string]string{
 			"/src/App.jsx": "original code",
 		},
@@ -389,7 +389,7 @@ func TestCodeBundleIteration(t *testing.T) {
 }
 
 func TestRefineInputWithEmptyCurrentCode(t *testing.T) {
-	input := RefineInput{
+	input := RefineCodeInput{
 		CurrentCode: map[string]string{},
 		ChatHistory: "Some feedback",
 	}

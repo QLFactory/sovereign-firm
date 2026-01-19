@@ -136,11 +136,10 @@ function FileTree({
         <button
           key={filepath}
           onClick={() => onSelectFile(filepath)}
-          className={`w-full text-left px-3 py-2 rounded text-sm font-mono transition-colors ${
-            selectedFile === filepath
+          className={`w-full text-left px-3 py-2 rounded text-sm font-mono transition-colors ${selectedFile === filepath
               ? "bg-[var(--cyan-glow)]/20 text-[var(--cyan-glow)]"
               : "bg-[var(--graphite)] text-[var(--silver)] hover:bg-[var(--slate)] hover:text-[var(--ivory)]"
-          }`}
+            }`}
         >
           {filepath}
         </button>
@@ -214,23 +213,14 @@ function WorkspaceContent({ projectId }: { projectId: string }) {
 
   // Poll for state updates
   useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/pods/${projectId}`);
-        if (response.ok) {
-          const state: ConsultancyState = await response.json();
-
-          // Update state
-          updateCurrentState(state);
-          setChat(state.chat_history || "");
-        }
-      } catch {
-        // Silently fail
+    const pollInterval = setInterval(() => {
+      if (projectId) {
+        fetchProjectState(projectId);
       }
-    }, 3000);
+    }, 5000); // Poll every 5 seconds to reduce load
 
     return () => clearInterval(pollInterval);
-  }, [projectId, updateCurrentState, setChat]);
+  }, [projectId, fetchProjectState]);
 
   // Get files from current state
   const files = currentState ? getAllFiles(currentState) : {};
@@ -278,16 +268,14 @@ function WorkspaceContent({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`badge ${phaseColor}`}>{phase}</span>
                   <span
-                    className={`text-xs flex items-center gap-1 ${
-                      wsConnected ? "text-[var(--emerald-glow)]" : "text-[var(--silver)]"
-                    }`}
+                    className={`text-xs flex items-center gap-1 ${wsConnected ? "text-[var(--emerald-glow)]" : "text-[var(--silver)]"
+                      }`}
                   >
                     <span
-                      className={`w-2 h-2 rounded-full ${
-                        wsConnected
+                      className={`w-2 h-2 rounded-full ${wsConnected
                           ? "bg-[var(--emerald-glow)] animate-pulse"
                           : "bg-[var(--steel)]"
-                      }`}
+                        }`}
                     />
                     {wsConnected ? "Connected" : "Disconnected"}
                   </span>
@@ -335,11 +323,10 @@ function WorkspaceContent({ projectId }: { projectId: string }) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveLeftTab(tab.id)}
-                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
-                    activeLeftTab === tab.id
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1 ${activeLeftTab === tab.id
                       ? "bg-[var(--cyan-glow)] text-[var(--void)]"
                       : "bg-[var(--graphite)] text-[var(--silver)] hover:text-[var(--ivory)]"
-                  }`}
+                    }`}
                 >
                   {tab.icon && <span>{tab.icon}</span>}
                   {tab.label}
@@ -442,23 +429,21 @@ function WorkspaceContent({ projectId }: { projectId: string }) {
               <button
                 key={tab.id}
                 onClick={() => setActiveRightTab(tab.id)}
-                className={`px-4 py-3 transition-colors whitespace-nowrap flex items-center gap-1 ${
-                  activeRightTab === tab.id
+                className={`px-4 py-3 transition-colors whitespace-nowrap flex items-center gap-1 ${activeRightTab === tab.id
                     ? "bg-[var(--graphite)] text-[var(--ivory)] border-b-2 border-[var(--cyan-glow)]"
                     : "text-[var(--silver)] hover:text-[var(--pearl)] hover:bg-[var(--graphite)]/50"
-                }`}
+                  }`}
               >
                 <span>{tab.icon}</span>
                 {tab.label}
                 {tab.id === "ci" && ciStages.length > 0 && (
                   <span
-                    className={`ml-1 text-xs px-1.5 rounded ${
-                      ciStages.some((s) => !s.success)
+                    className={`ml-1 text-xs px-1.5 rounded ${ciStages.some((s) => !s.success)
                         ? "bg-[var(--rose-glow)]"
                         : ciStages.length === 3
-                        ? "bg-[var(--emerald-glow)]"
-                        : "bg-[var(--amber-glow)]"
-                    } text-[var(--void)]`}
+                          ? "bg-[var(--emerald-glow)]"
+                          : "bg-[var(--amber-glow)]"
+                      } text-[var(--void)]`}
                   >
                     {ciStages.filter((s) => s.success).length}/3
                   </span>
@@ -498,17 +483,16 @@ function WorkspaceContent({ projectId }: { projectId: string }) {
                   terminalOutput.map((line, i) => (
                     <div
                       key={i}
-                      className={`whitespace-pre-wrap ${
-                        line.includes("❌")
+                      className={`whitespace-pre-wrap ${line.includes("❌")
                           ? "text-[var(--rose-glow)]"
                           : line.includes("✅")
-                          ? "text-[var(--emerald-glow)]"
-                          : line.includes("📍")
-                          ? "text-[var(--cyan-glow)]"
-                          : line.includes("📝")
-                          ? "text-[var(--amber-glow)]"
-                          : "text-[var(--silver)]"
-                      }`}
+                            ? "text-[var(--emerald-glow)]"
+                            : line.includes("📍")
+                              ? "text-[var(--cyan-glow)]"
+                              : line.includes("📝")
+                                ? "text-[var(--amber-glow)]"
+                                : "text-[var(--silver)]"
+                        }`}
                     >
                       {line}
                     </div>

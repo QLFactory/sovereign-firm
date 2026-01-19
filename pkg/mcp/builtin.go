@@ -13,11 +13,19 @@ import (
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/memory"
 )
 
+// AgentMessaging interface for tools to interact with the agent system
+type AgentMessaging interface {
+	SendMessage(from, to, subject string, content interface{}) error
+	GetAgents(projectID string) []map[string]string // ID, Name, Role
+}
+
 // ToolConfig holds optional configuration for builtin tools
 type ToolConfig struct {
 	RAGPipeline *memory.RAGPipeline
 	ProjectID   string
 	ClientID    string
+	AgentID     string
+	Messaging   AgentMessaging
 }
 
 // RegisterBuiltinTools registers all built-in tools
@@ -44,6 +52,12 @@ func RegisterBuiltinToolsWithConfig(registry *ToolRegistry, workDir string, conf
 	// Search and analysis
 	registry.Register(semanticSearchDef(), semanticSearchHandler(config))
 	registry.Register(grepSearchDef(), grepSearchHandler(workDir))
+
+	// Collaboration
+	if config != nil && config.Messaging != nil {
+		registry.Register(getAgentsDef(), getAgentsHandler(config))
+		registry.Register(messageAgentDef(), messageAgentHandler(config))
+	}
 }
 
 // =====================
@@ -529,6 +543,66 @@ func grepSearchHandler(workDir string) ToolHandler {
 			ID:      req.ID,
 			Success: true,
 			Result:  results,
+		}
+	}
+}
+
+// =====================
+// COLLABORATION
+// =====================
+
+func getAgentsDef() *ToolDefinition {
+	return &ToolDefinition{
+		Name:        "get_agents",
+		Description: "List available agents in the current project for collaboration",
+		Type:        ToolTypeCustom,
+		Parameters:  []Parameter{},
+		Returns:     "List of available agents (ID, Name, Role)",
+	}
+}
+
+func getAgentsHandler(config *ToolConfig) ToolHandler {
+	return func(ctx context.Context, req *ToolRequest) *ToolResponse {
+		agents := config.Messaging.GetAgents(config.ProjectID)
+		return &ToolResponse{
+			ID:      req.ID,
+			Success: true,
+			Result:  agents,
+		}
+	}
+}
+
+func messageAgentDef() *ToolDefinition {
+	return &ToolDefinition{
+		Name:        "message_agent",
+		Description: "Send a message to another agent (e.g., ask a question or share an artifact)",
+		Type:        ToolTypeCustom,
+		Parameters: []Parameter{
+			{Name: "to", Type: ParamTypeString, Description: "Target Agent ID", Required: true},
+			{Name: "subject", Type: ParamTypeString, Description: "Message subject", Required: true},
+			{Name: "content", Type: ParamTypeObject, Description: "Message content (e.g., {'question': '...'})", Required: true},
+		},
+		Returns: "Success message",
+	}
+}
+
+func messageAgentHandler(config *ToolConfig) ToolHandler {
+	return func(ctx context.Context, req *ToolRequest) *ToolResponse {
+		to, _ := req.Params["to"].(string)
+		subject, _ := req.Params["subject"].(string)
+		content := req.Params["content"]
+
+		from := req.Context.AgentID
+
+		err := config.Messaging.SendMessage(from, to, subject, content)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodeExecutionFailed, "failed to send message", err.Error())
+		}
+
+		return &ToolResponse{
+			ID:      req.ID,
+			Success: true,
+			Result:  fmt.Sprintf("Message sent to %s", to),
 		}
 	}
 }

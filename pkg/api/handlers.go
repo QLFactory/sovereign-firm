@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/qlfactory/sovereign-firm/pkg/auth"
 	"github.com/qlfactory/sovereign-firm/pkg/cache"
@@ -18,6 +19,7 @@ import (
 	"github.com/qlfactory/sovereign-firm/pkg/storage"
 	"github.com/qlfactory/sovereign-firm/pkg/streaming"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 )
 
 // Handler implements the API handlers
@@ -206,11 +208,13 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate workflow ID
+	// Generate IDs
 	workflowID := fmt.Sprintf("consultancy_%s_%d", strings.ReplaceAll(req.Name, " ", "_"), time.Now().Unix())
+	projectID := uuid.New().String()
 
 	// Create workflow config
 	config := workflows.ConsultancyConfig{
+		ProjectID:         projectID,
 		ProjectName:       req.Name,
 		ClientID:          tenantID,
 		InitialMessage:    req.InitialMessage,
@@ -241,15 +245,15 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(ctx)
 
 	// Insert project into database
-	var projectID string
 	var createdAt, updatedAt time.Time
 	err = tx.QueryRow(ctx,
-		`INSERT INTO projects (tenant_id, workflow_id, name, description, config, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, created_at, updated_at`,
-		tenantID, workflowID, req.Name, req.Description, configJSON, userID,
-	).Scan(&projectID, &createdAt, &updatedAt)
+		`INSERT INTO projects (id, tenant_id, workflow_id, name, description, config, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 RETURNING created_at, updated_at`,
+		projectID, tenantID, workflowID, req.Name, req.Description, configJSON, userID,
+	).Scan(&createdAt, &updatedAt)
 	if err != nil {
+		log.Printf("CreateProject: insert error: %v", err)
 		jsonError(w, "failed to create project", http.StatusInternalServerError)
 		return
 	}
@@ -295,7 +299,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := auth.GetTenantID(ctx)
-	projectID := chi.URLParam(r, "projectId")
+	idOrWorkflowID := chi.URLParam(r, "projectId")
 
 	if tenantID == "" {
 		jsonError(w, "unauthorized", http.StatusUnauthorized)
@@ -312,16 +316,17 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	// SET LOCAL doesn't support parameterized values
 	tx.Exec(ctx, fmt.Sprintf("SET LOCAL app.tenant_id = '%s'", tenantID))
 
-	var p ProjectResponse
-	err = tx.QueryRow(ctx,
-		`SELECT id, workflow_id, name, COALESCE(description, ''), phase, status,
+	query := `SELECT id, workflow_id, name, COALESCE(description, ''), phase, status,
 		        COALESCE(created_by::text, ''), created_at, updated_at
-		 FROM projects WHERE id = $1 AND tenant_id = $2`,
-		projectID, tenantID,
-	).Scan(&p.ID, &p.WorkflowID, &p.Name, &p.Description, &p.Phase, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+		 FROM projects WHERE (id::text = $1 OR workflow_id = $1) AND tenant_id = $2`
+
+	var p ProjectResponse
+	err = tx.QueryRow(ctx, query, idOrWorkflowID, tenantID).Scan(
+		&p.ID, &p.WorkflowID, &p.Name, &p.Description, &p.Phase, &p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
+	)
 
 	if err != nil {
-		log.Printf("GetProject: query error for %s: %v", projectID, err)
+		log.Printf("GetProject: query error for %s: %v", idOrWorkflowID, err)
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
 	}
@@ -336,19 +341,19 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := auth.GetTenantID(ctx)
-	projectID := chi.URLParam(r, "projectId")
+	idOrWorkflowID := chi.URLParam(r, "projectId")
 
 	if tenantID == "" {
 		jsonError(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Get workflow ID from database
-	var workflowID string
+	// Get workflow ID and project ID from database
+	var workflowID, projectID string
 	err := h.db.QueryRow(ctx,
-		"SELECT workflow_id FROM projects WHERE id = $1 AND tenant_id = $2",
-		projectID, tenantID,
-	).Scan(&workflowID)
+		"SELECT workflow_id, id FROM projects WHERE (id::text = $1 OR workflow_id = $1) AND tenant_id = $2",
+		idOrWorkflowID, tenantID,
+	).Scan(&workflowID, &projectID)
 	if err != nil {
 		jsonError(w, "project not found", http.StatusNotFound)
 		return
@@ -656,17 +661,17 @@ func jsonError(w http.ResponseWriter, message string, status int) {
 
 func calculateProgress(phase string) int {
 	phases := map[string]int{
-		"INTAKE":      5,
-		"PLANNING":    15,
+		"INTAKE":       5,
+		"PLANNING":     15,
 		"ARCHITECTURE": 25,
-		"DATABASE":    35,
-		"BACKEND":     50,
-		"FRONTEND":    65,
-		"INTEGRATION": 75,
-		"TESTING":     85,
-		"DEPLOYMENT":  95,
-		"HANDOFF":     100,
-		"COMPLETED":   100,
+		"DATABASE":     35,
+		"BACKEND":      50,
+		"FRONTEND":     65,
+		"INTEGRATION":  75,
+		"TESTING":      85,
+		"DEPLOYMENT":   95,
+		"HANDOFF":      100,
+		"COMPLETED":    100,
 	}
 	if progress, ok := phases[phase]; ok {
 		return progress
@@ -695,12 +700,14 @@ type ImportBrownfieldResponse struct {
 
 // ImportStatusResponse represents the status of a brownfield import
 type ImportStatusResponse struct {
-	Status       string `json:"status"` // "analyzing", "complete", "error"
-	FilesIndexed int    `json:"files_indexed,omitempty"`
-	ChunksCreated int   `json:"chunks_created,omitempty"`
-	SymbolsFound int    `json:"symbols_found,omitempty"`
-	Error        string `json:"error,omitempty"`
-	Phase        string `json:"phase,omitempty"`
+	Status        string   `json:"status"` // "analyzing", "complete", "error"
+	FilesIndexed  int      `json:"files_indexed,omitempty"`
+	ChunksCreated int      `json:"chunks_created,omitempty"`
+	SymbolsFound  int      `json:"symbols_found,omitempty"`
+	PrimaryLang   string   `json:"primary_lang,omitempty"`
+	DetectedStack []string `json:"detected_stack,omitempty"`
+	Error         string   `json:"error,omitempty"`
+	Phase         string   `json:"phase,omitempty"`
 }
 
 // ImportBrownfield starts a brownfield import workflow
@@ -870,8 +877,8 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var browfieldStatus workflows.BrownfieldStatus
-	if err := resp.Get(&browfieldStatus); err != nil {
+	var bfStatus workflows.BrownfieldStatus
+	if err := resp.Get(&bfStatus); err != nil {
 		log.Printf("GetImportStatus: Failed to decode brownfield status for %s: %v", workflowID, err)
 		// Return basic status if can't decode
 		w.Header().Set("Content-Type", "application/json")
@@ -882,16 +889,41 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If still analyzing, try to get granular progress from pending activity heartbeats
+	if bfStatus.Status == "analyzing" {
+		desc, err := h.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
+		if err == nil {
+			for _, pending := range desc.PendingActivities {
+				if pending.ActivityType.GetName() == "BrownfieldAnalyzeProject" && pending.HeartbeatDetails != nil {
+					// The activity heartbeats with a subset of BrownfieldResult
+					var heartbeat struct {
+						FilesIndexed  int `json:"files_indexed"`
+						ChunksCreated int `json:"chunks_created"`
+						SymbolsFound  int `json:"symbols_found"`
+					}
+					// Use the data converter to decode heartbeat details
+					if err := converter.GetDefaultDataConverter().FromPayloads(pending.HeartbeatDetails, &heartbeat); err == nil {
+						bfStatus.FilesIndexed = heartbeat.FilesIndexed
+						bfStatus.ChunksCreated = heartbeat.ChunksCreated
+						bfStatus.SymbolsFound = heartbeat.SymbolsFound
+					}
+				}
+			}
+		}
+	}
+
 	log.Printf("GetImportStatus: %s status=%s files=%d chunks=%d phase=%s",
-		workflowID, browfieldStatus.Status, browfieldStatus.FilesIndexed, browfieldStatus.ChunksCreated, phase)
+		workflowID, bfStatus.Status, bfStatus.FilesIndexed, bfStatus.ChunksCreated, bfStatus.Phase)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ImportStatusResponse{
-		Status:        browfieldStatus.Status,
-		FilesIndexed:  browfieldStatus.FilesIndexed,
-		ChunksCreated: browfieldStatus.ChunksCreated,
-		SymbolsFound:  browfieldStatus.SymbolsFound,
-		Error:         browfieldStatus.Error,
-		Phase:         phase,
+		Status:        bfStatus.Status,
+		Phase:         bfStatus.Phase,
+		FilesIndexed:  bfStatus.FilesIndexed,
+		ChunksCreated: bfStatus.ChunksCreated,
+		SymbolsFound:  bfStatus.SymbolsFound,
+		PrimaryLang:   bfStatus.PrimaryLang,
+		DetectedStack: bfStatus.DetectedStack,
+		Error:         bfStatus.Error,
 	})
 }

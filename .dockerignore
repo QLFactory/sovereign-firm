@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+node_modules
+frontend/node_modules
+chroma-data
+postgres-data
+*.log
+orchestrator
+worker
+test-consultancy
+tmp
+.env
+.gemini

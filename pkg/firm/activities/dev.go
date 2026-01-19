@@ -6,18 +6,22 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/qlfactory/sovereign-firm/pkg/agent"
+	"github.com/qlfactory/sovereign-firm/pkg/mcp"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/llm"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/memory"
 )
 
 type DevAgent struct {
+	pool      *agent.AgentPool
 	llmClient llm.Client
 	store     memory.Store
 }
 
-func NewDevAgent() *DevAgent {
+func NewDevAgent(pool *agent.AgentPool) *DevAgent {
 	llmClient := llm.NewClient()
 	return &DevAgent{
+		pool:      pool,
 		llmClient: llmClient,
 		store:     memory.NewChromaClient(llmClient),
 	}
@@ -26,7 +30,13 @@ func NewDevAgent() *DevAgent {
 type CodeBundle map[string]string
 
 // GenerateCode takes the final spec and produces the file system
-func (a *DevAgent) GenerateCode(ctx context.Context, spec string) (CodeBundle, error) {
+func (a *DevAgent) GenerateCode(ctx context.Context, input GenerateCodeInput) (CodeBundle, error) {
+	spec := input.Spec
+	projectID := input.ProjectID
+
+	if projectID == "" {
+		projectID = "default-project"
+	}
 	sysPrompt := `You are a Senior React Developer using Vite. 
 Output ONLY valid JSON.
 The JSON must be a map where keys are filenames (MUST start with "/src/", e.g., "/src/App.jsx", "/src/components/Header.jsx") and values are the code content.
@@ -34,13 +44,18 @@ Do not include markdown backticks.
 Use .jsx extension for React components (NOT .js).
 Use standard CSS or inline styles. Do NOT use Tailwind CSS.
 Build a modern React app using React 18+ standards.
+Use 'react-router-dom' for navigation and 'framer-motion' for rich, premium animations.
 DO NOT generate package.json - we will provide that.
+
+COLLABORATION: If the requirements are ambiguous or you need clarification on the product vision, you can use the 'get_agents' tool to find the 'product-manager' and 'message_agent' to ask them questions. They are here to help you build the best possible MVP.
+
 IMPORTANT: If you generate '/src/main.jsx', IT MUST BE EXACTLY:
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(<BrowserRouter><App /></BrowserRouter>);
 `
 	// RAG (with timeout)
 	ragCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -59,22 +74,39 @@ root.render(<App />);
 
 	// Simple Prompt Engineering for JSON
 	// In production, we'd use a constrained grammar or more robust parsing.
-	prompt := fmt.Sprintf("Requirements:\n%s\n\nGenerate the JSON filesystem now.", spec)
-
-	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
-		Prompt: prompt,
-		System: sysPrompt,
-		Format: "json", // Ollama supports "format": "json" natively
-	})
+	// Spawn or get agent for this project
+	agentInstance, err := a.pool.SpawnAgent(ctx, "Dev", "senior-react-dev", projectID, "gpt-4", []string{"react-developer"})
 	if err != nil {
-		return nil, fmt.Errorf("Dev brain failed: %w", err)
+		return nil, fmt.Errorf("failed to spawn agent: %w", err)
 	}
-	fmt.Printf("DEBUG: DevAgent V3-ROBUST received response: %s\n", resp.Response)
+
+	// Setup tool registry with collaboration tools
+	registry := mcp.NewToolRegistry()
+	mcp.RegisterBuiltinToolsWithConfig(registry, ".", &mcp.ToolConfig{
+		ProjectID: projectID,
+		AgentID:   agentInstance.ID,
+		Messaging: a.pool,
+	})
+
+	// Execute via AgentExecutor
+	executor := agent.NewAgentExecutor(agentInstance, registry, a.llmClient)
+	task := &agent.Task{
+		Description: sysPrompt + "\n\nRequirements:\n" + spec,
+		Type:        "code_generate",
+	}
+
+	result, err := executor.ExecuteTask(ctx, task)
+	if err != nil {
+		return nil, fmt.Errorf("Dev task failed: %w", err)
+	}
+
+	respContent := fmt.Sprintf("%v", result.Output)
+	fmt.Printf("DEBUG: DevAgent received response: %s\n", respContent)
 
 	// Robust JSON Extraction
 	var rawBundle map[string]interface{}
-	if err := a.extractAndUnmarshalJSON(resp.Response, &rawBundle); err != nil {
-		return nil, fmt.Errorf("failed to parse code bundle: %w. Response: %s", err, resp.Response)
+	if err := a.extractAndUnmarshalJSON(respContent, &rawBundle); err != nil {
+		return nil, fmt.Errorf("failed to parse code bundle: %w. Response: %s", err, respContent)
 	}
 
 	bundle := make(CodeBundle)
@@ -162,10 +194,11 @@ func (a *DevAgent) postProcessBundle(bundle CodeBundle) CodeBundle {
 	// 1. Force valid main.jsx in /src (Vite entry point)
 	bundle["/src/main.jsx"] = `import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 
 const root = createRoot(document.getElementById('root'));
-root.render(<App />);`
+root.render(<BrowserRouter><App /></BrowserRouter>);`
 
 	// 2. Ensure we have an index.html for Vite
 	bundle["/index.html"] = `<!DOCTYPE html>
@@ -199,9 +232,15 @@ export default defineConfig({
 			"test":  "vitest run",
 		},
 		"dependencies": map[string]string{
-			"react":            "^18.2.0",
-			"react-dom":        "^18.2.0",
-			"react-router-dom": "^6.22.0",
+			"react":                 "^18.2.0",
+			"react-dom":             "^18.2.0",
+			"react-router-dom":      "^6.22.0",
+			"framer-motion":         "^11.0.8",
+			"lucide-react":          "^0.344.0",
+			"react-query":           "^3.39.3",
+			"@tanstack/react-query": "^5.28.4",
+			"clsx":                  "^2.1.0",
+			"tailwind-merge":        "^2.2.1",
 		},
 		"devDependencies": map[string]string{
 			"vite":                   "^5.0.0",
@@ -218,20 +257,9 @@ export default defineConfig({
 	return bundle
 }
 
-// RefineInput struct to deserialized the map interface{}
-type RefineInput struct {
-	CurrentCode        map[string]string `json:"current_code"`
-	ChatHistory        string            `json:"chat_history"`
-	ValidationFeedback string            `json:"validation_feedback,omitempty"`
-}
-
 // RefineCode modifies existing code based on feedback
-func (a *DevAgent) RefineCode(ctx context.Context, input map[string]interface{}) (CodeBundle, error) {
-	// Manual unmarshal since Temporal passes map[string]interface{} for dynamic inputs usually,
-	// or we can just cast if it was preserved. Safe way is to marshal/unmarshal.
-	inputBytes, _ := json.Marshal(input)
-	var req RefineInput
-	json.Unmarshal(inputBytes, &req)
+func (a *DevAgent) RefineCode(ctx context.Context, input RefineCodeInput) (CodeBundle, error) {
+	req := input
 
 	sysPrompt := `You are a Senior React Developer being asked to modify an existing application.
 Output ONLY valid JSON of the *modified* files.
@@ -256,18 +284,37 @@ IMPORTANT: Fix any validation errors first before implementing new features.
 
 	// RAG (Refinement patterns?) - skipped for now to save context, or we could look up "how to change colors".
 
-	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
-		Prompt: prompt,
-		System: sysPrompt,
-		Format: "json",
-	})
+	// Spawn or get agent for this project
+	agentInstance, err := a.pool.SpawnAgent(ctx, "Dev", "senior-react-dev", "project-1", "gpt-4", []string{"react-developer"})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to spawn agent: %w", err)
 	}
 
+	// Setup tool registry
+	registry := mcp.NewToolRegistry()
+	mcp.RegisterBuiltinToolsWithConfig(registry, ".", &mcp.ToolConfig{
+		ProjectID: "project-1",
+		AgentID:   agentInstance.ID,
+		Messaging: a.pool,
+	})
+
+	// Execute via AgentExecutor
+	executor := agent.NewAgentExecutor(agentInstance, registry, a.llmClient)
+	task := &agent.Task{
+		Description: sysPrompt + "\n\nInstructions:\n" + prompt,
+		Type:        "code_refine",
+	}
+
+	result, err := executor.ExecuteTask(ctx, task)
+	if err != nil {
+		return nil, fmt.Errorf("Refine task failed: %w", err)
+	}
+
+	respContent := fmt.Sprintf("%v", result.Output)
+
 	var rawChanges map[string]interface{}
-	if err := a.extractAndUnmarshalJSON(resp.Response, &rawChanges); err != nil {
-		return nil, fmt.Errorf("failed to parse changes: %w", err)
+	if err := a.extractAndUnmarshalJSON(respContent, &rawChanges); err != nil {
+		return nil, fmt.Errorf("failed to parse changes: %w. Response: %s", err, respContent)
 	}
 
 	changes := make(CodeBundle)

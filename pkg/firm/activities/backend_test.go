@@ -10,9 +10,9 @@ func TestBackendCodeBundleStructure(t *testing.T) {
 	bundle := BackendCodeBundle{
 		Stack: "node-express",
 		Files: map[string]string{
-			"src/index.ts":       "console.log('hello')",
-			"package.json":       "{}",
-			"tsconfig.json":      "{}",
+			"src/index.ts":  "console.log('hello')",
+			"package.json":  "{}",
+			"tsconfig.json": "{}",
 		},
 		EntryPoint: "src/index.ts",
 		StartCmd:   "npm run dev",
@@ -559,7 +559,7 @@ func TestBackendCodeBundleEmpty(t *testing.T) {
 		t.Fatalf("Failed to unmarshal empty BackendCodeBundle: %v", err)
 	}
 
-	if unmarshaled.Files != nil && len(unmarshaled.Files) != 0 {
+	if len(unmarshaled.Files) != 0 {
 		t.Error("Empty bundle should have nil or empty files")
 	}
 }

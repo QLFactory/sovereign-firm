@@ -19,8 +19,19 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [tenantName, setTenantName] = useState("");
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Handle token from URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token");
+    if (token) {
+      setInviteToken(token);
+      setTenantName("Joining existing organization..."); // Placeholder
+    }
+  }, []);
 
   // Check if already authenticated
   useEffect(() => {
@@ -43,7 +54,7 @@ export default function RegisterPage() {
     e.preventDefault();
 
     // Validate inputs
-    if (!email || !password || !confirmPassword || !name || !tenantName) {
+    if (!email || !password || !confirmPassword || !name || (!tenantName && !inviteToken)) {
       setValidationError("All fields are required");
       return;
     }
@@ -59,7 +70,13 @@ export default function RegisterPage() {
     }
 
     setIsSubmitting(true);
-    const success = await register({ email, password, name, tenant_name: tenantName });
+    const success = await register({
+      email,
+      password,
+      name,
+      tenant_name: tenantName,
+      invite_token: inviteToken || undefined
+    });
     setIsSubmitting(false);
 
     if (success) {
@@ -125,17 +142,18 @@ export default function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label htmlFor="tenantName" className="input-label">
-                  Company / Organization Name
+                  {inviteToken ? "Organization (Pre-filled from invite)" : "Company / Organization Name"}
                 </label>
                 <input
                   id="tenantName"
                   type="text"
                   value={tenantName}
                   onChange={(e) => { setTenantName(e.target.value); clearErrors(); }}
-                  className="input"
+                  className={`input ${inviteToken ? "opacity-50 cursor-not-allowed bg-[var(--graphite)]" : ""}`}
                   placeholder="Acme Inc."
-                  required
-                  autoFocus
+                  required={!inviteToken}
+                  disabled={!!inviteToken}
+                  autoFocus={!inviteToken}
                 />
               </div>
 

@@ -23,6 +23,7 @@ type RAGConfig struct {
 	MinRelevance     float32 // Minimum relevance score (default: 0.5)
 	IncludeMetadata  bool    // Include file paths, line numbers (default: true)
 	GroupByFile      bool    // Group chunks from same file (default: true)
+	BoostSymbols     bool    // prioritize architectural symbols (default: true)
 }
 
 // DefaultRAGConfig returns sensible defaults
@@ -33,6 +34,7 @@ func DefaultRAGConfig() RAGConfig {
 		MinRelevance:     0.5,
 		IncludeMetadata:  true,
 		GroupByFile:      true,
+		BoostSymbols:     true,
 	}
 }
 
@@ -50,19 +52,19 @@ func NewRAGPipeline(store *MultiLevelStore, embedder llm.Client, config RAGConfi
 
 // RetrievalContext holds the result of RAG retrieval
 type RetrievalContext struct {
-	Query         string              `json:"query"`
-	Documents     []EnrichedDocument  `json:"documents"`
-	FormattedText string              `json:"formatted_text"`
-	TokenEstimate int                 `json:"token_estimate"`
-	Sources       []SourceReference   `json:"sources"`
+	Query         string             `json:"query"`
+	Documents     []EnrichedDocument `json:"documents"`
+	FormattedText string             `json:"formatted_text"`
+	TokenEstimate int                `json:"token_estimate"`
+	Sources       []SourceReference  `json:"sources"`
 }
 
 // SourceReference tracks where retrieved content came from
 type SourceReference struct {
-	FilePath  string `json:"file_path,omitempty"`
-	StartLine int    `json:"start_line,omitempty"`
-	EndLine   int    `json:"end_line,omitempty"`
-	Type      string `json:"type"`
+	FilePath  string  `json:"file_path,omitempty"`
+	StartLine int     `json:"start_line,omitempty"`
+	EndLine   int     `json:"end_line,omitempty"`
+	Type      string  `json:"type"`
 	Score     float32 `json:"score,omitempty"`
 }
 
@@ -113,6 +115,14 @@ func (r *RAGPipeline) Retrieve(ctx context.Context, query string, projectID, cli
 			Score:     doc.Score,
 		})
 		tokenCount += docTokens
+	}
+
+	// 2. symbol boost: if enabled, find critical symbols mentioned in query
+	if r.config.BoostSymbols {
+		expandedDocs, err := r.expandSymbolContext(ctx, query, projectID, clientID, retrieval.Documents)
+		if err == nil && len(expandedDocs) > 0 {
+			retrieval.Documents = r.mergeUnique(retrieval.Documents, expandedDocs)
+		}
 	}
 
 	// Format as text
@@ -288,9 +298,9 @@ type RAGRequest struct {
 
 // RAGResponse contains the result of RAG-augmented generation
 type RAGResponse struct {
-	Response      string            `json:"response"`
-	Retrieval     *RetrievalContext `json:"retrieval"`
-	TokensUsed    int               `json:"tokens_used"`
+	Response   string            `json:"response"`
+	Retrieval  *RetrievalContext `json:"retrieval"`
+	TokensUsed int               `json:"tokens_used"`
 }
 
 // Generate performs RAG-augmented generation
@@ -433,4 +443,63 @@ func isCommonError(errorMsg string) bool {
 		}
 	}
 	return false
+}
+
+// expandSymbolContext finds symbols relevant to the query and retrieves their full source
+func (r *RAGPipeline) expandSymbolContext(ctx context.Context, query string, projectID, clientID string, existing []EnrichedDocument) ([]EnrichedDocument, error) {
+	// 1. Search for relevant symbols
+	res, err := r.store.Search(ctx, SearchOptions{
+		Query:     query,
+		Limit:     5,
+		Levels:    []MemoryLevel{ProjectMemory},
+		ProjectID: projectID,
+		Types:     []DocumentType{DocTypeSymbol},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	expanded := make([]EnrichedDocument, 0)
+	for _, symDoc := range res.Documents {
+		// Only boost if high relevance
+		if symDoc.Score < 0.7 {
+			continue
+		}
+
+		filePath := symDoc.FilePath
+		symbolName, _ := symDoc.Metadata["symbol_name"].(string)
+
+		// 2. Fetch the actual code chunk for this symbol
+		codeRes, err := r.store.Search(ctx, SearchOptions{
+			Query:     fmt.Sprintf("%s in %s", symbolName, filePath),
+			Limit:     1,
+			Levels:    []MemoryLevel{ProjectMemory},
+			ProjectID: projectID,
+			ClientID:  clientID,
+			Types:     []DocumentType{DocTypeCode},
+		})
+
+		if err == nil && len(codeRes.Documents) > 0 {
+			expanded = append(expanded, codeRes.Documents[0])
+		}
+	}
+
+	return expanded, nil
+}
+
+// mergeUnique combines two document slices avoiding duplicates
+func (r *RAGPipeline) mergeUnique(base, extra []EnrichedDocument) []EnrichedDocument {
+	seen := make(map[string]bool)
+	for _, d := range base {
+		seen[d.ID] = true
+	}
+
+	result := base
+	for _, d := range extra {
+		if !seen[d.ID] {
+			result = append(result, d)
+			seen[d.ID] = true
+		}
+	}
+	return result
 }

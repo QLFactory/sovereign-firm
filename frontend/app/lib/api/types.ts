@@ -72,8 +72,9 @@ export interface ProjectConfig {
 
 export interface ConsultancyState {
   // Core identifiers
+  project_id?: string; // Database UUID
+  workflow_id?: string; // Temporal ID
   project_name: string;
-  workflow_id?: string;
 
   // Phase tracking
   phase: Phase;
@@ -119,6 +120,13 @@ export interface ConsultancyState {
   alert_rules: Record<string, unknown>;
   dashboards: Record<string, unknown>;
   runbooks: Record<string, string>;
+
+  // Multi-agent state
+  dag?: DAGState;
+  agents?: ActiveAgent[];
+  ci_status?: {
+    stages: CIStageResult[];
+  };
 
   // Errors and warnings
   errors: string[];
@@ -355,6 +363,7 @@ export interface CreateProjectRequest {
 }
 
 export interface CreateProjectResponse {
+  id: string; // Database UUID
   workflow_id: string;
   status?: string;
   message?: string;
@@ -405,6 +414,14 @@ export interface RegisterRequest {
   password: string;
   name: string;
   tenant_name: string;
+  invite_token?: string;
+}
+
+export interface Invitation {
+  email: string;
+  role: string;
+  token: string;
+  status: string;
 }
 
 export interface AuthResponse {

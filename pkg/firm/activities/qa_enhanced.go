@@ -27,30 +27,30 @@ func NewEnhancedQAAgent() *EnhancedQAAgent {
 
 // TestBundle represents generated test files
 type TestBundle struct {
-	TestType    string            `json:"test_type"`    // "unit", "integration", "e2e", "performance", "security", "accessibility"
-	Framework   string            `json:"framework"`    // "vitest", "jest", "pytest", "playwright", "k6", etc.
-	Files       map[string]string `json:"files"`        // filename -> content
-	SetupFiles  map[string]string `json:"setup_files"`  // Config files (playwright.config.ts, etc.)
-	RunCmd      string            `json:"run_cmd"`      // Command to run tests
-	CIConfig    string            `json:"ci_config"`    // CI/CD step for this test type
+	TestType   string            `json:"test_type"`   // "unit", "integration", "e2e", "performance", "security", "accessibility"
+	Framework  string            `json:"framework"`   // "vitest", "jest", "pytest", "playwright", "k6", etc.
+	Files      map[string]string `json:"files"`       // filename -> content
+	SetupFiles map[string]string `json:"setup_files"` // Config files (playwright.config.ts, etc.)
+	RunCmd     string            `json:"run_cmd"`     // Command to run tests
+	CIConfig   string            `json:"ci_config"`   // CI/CD step for this test type
 }
 
 // TestCoverage represents test coverage analysis
 type TestCoverage struct {
-	TotalFiles     int                `json:"total_files"`
-	TestedFiles    int                `json:"tested_files"`
-	CoveragePercent float64           `json:"coverage_percent"`
-	UncoveredFiles []string           `json:"uncovered_files"`
-	Recommendations []string          `json:"recommendations"`
+	TotalFiles      int      `json:"total_files"`
+	TestedFiles     int      `json:"tested_files"`
+	CoveragePercent float64  `json:"coverage_percent"`
+	UncoveredFiles  []string `json:"uncovered_files"`
+	Recommendations []string `json:"recommendations"`
 }
 
 // SecurityScanResult represents security scan configuration and findings
 type SecurityScanResult struct {
-	ScanType       string             `json:"scan_type"`    // "sast", "dast", "dependency", "secrets"
-	Tool           string             `json:"tool"`         // "trivy", "snyk", "gitleaks", "zap"
-	ConfigFiles    map[string]string  `json:"config_files"`
-	RunCmd         string             `json:"run_cmd"`
-	CIConfig       string             `json:"ci_config"`
+	ScanType    string            `json:"scan_type"` // "sast", "dast", "dependency", "secrets"
+	Tool        string            `json:"tool"`      // "trivy", "snyk", "gitleaks", "zap"
+	ConfigFiles map[string]string `json:"config_files"`
+	RunCmd      string            `json:"run_cmd"`
+	CIConfig    string            `json:"ci_config"`
 }
 
 // ============================================================================
@@ -59,25 +59,26 @@ type SecurityScanResult struct {
 
 // IntegrationTestInput for generating API integration tests
 type IntegrationTestInput struct {
-	Stack       string            `json:"stack"`        // "node", "python", "go"
-	Framework   string            `json:"framework"`    // "express", "fastapi", "gin"
-	APISpec     *APISpec          `json:"api_spec,omitempty"`
-	CodeFiles   map[string]string `json:"code_files"`
-	DatabaseType string           `json:"database_type,omitempty"`
+	Stack        string            `json:"stack"`     // "node", "python", "go"
+	Framework    string            `json:"framework"` // "express", "fastapi", "gin"
+	APISpec      *APISpec          `json:"api_spec,omitempty"`
+	CodeFiles    map[string]string `json:"code_files"`
+	DatabaseType string            `json:"database_type,omitempty"`
 }
 
 // E2ETestInput for generating end-to-end tests
 type E2ETestInput struct {
-	Framework    string            `json:"framework"`    // "playwright", "cypress"
+	Framework    string            `json:"framework"` // "playwright", "cypress"
 	BaseURL      string            `json:"base_url"`
-	UserFlows    []string          `json:"user_flows"`   // Key user journeys to test
+	UserFlows    []string          `json:"user_flows"` // Key user journeys to test
 	CodeFiles    map[string]string `json:"code_files"`
 	AuthRequired bool              `json:"auth_required"`
+	APISpec      *APISpec          `json:"api_spec,omitempty"`
 }
 
 // PerformanceTestInput for generating load tests
 type PerformanceTestInput struct {
-	Tool         string   `json:"tool"`          // "k6", "artillery"
+	Tool         string   `json:"tool"` // "k6", "artillery"
 	BaseURL      string   `json:"base_url"`
 	Endpoints    []string `json:"endpoints"`     // Endpoints to test
 	TargetRPS    int      `json:"target_rps"`    // Target requests per second
@@ -87,26 +88,26 @@ type PerformanceTestInput struct {
 
 // SecurityTestInput for generating security test configurations
 type SecurityTestInput struct {
-	ScanTypes    []string          `json:"scan_types"`   // "sast", "dast", "dependency", "secrets"
-	Stack        string            `json:"stack"`
-	CodeFiles    map[string]string `json:"code_files,omitempty"`
-	BaseURL      string            `json:"base_url,omitempty"` // For DAST
+	ScanTypes []string          `json:"scan_types"` // "sast", "dast", "dependency", "secrets"
+	Stack     string            `json:"stack"`
+	CodeFiles map[string]string `json:"code_files,omitempty"`
+	BaseURL   string            `json:"base_url,omitempty"` // For DAST
 }
 
 // AccessibilityTestInput for generating a11y tests
 type AccessibilityTestInput struct {
-	Tool        string   `json:"tool"`         // "axe", "pa11y"
-	BaseURL     string   `json:"base_url"`
-	Pages       []string `json:"pages"`        // Pages to test
-	Standard    string   `json:"standard"`     // "WCAG2A", "WCAG2AA", "WCAG2AAA"
+	Tool     string   `json:"tool"` // "axe", "pa11y"
+	BaseURL  string   `json:"base_url"`
+	Pages    []string `json:"pages"`    // Pages to test
+	Standard string   `json:"standard"` // "WCAG2A", "WCAG2AA", "WCAG2AAA"
 }
 
 // BackendTestInput for generating backend unit tests
 type BackendTestInput struct {
-	Stack       string            `json:"stack"`       // "node", "python", "go"
-	Framework   string            `json:"framework"`   // "express", "fastapi", "gin"
-	CodeFiles   map[string]string `json:"code_files"`
-	TestFramework string          `json:"test_framework,omitempty"` // "jest", "pytest", "go test"
+	Stack         string            `json:"stack"`     // "node", "python", "go"
+	Framework     string            `json:"framework"` // "express", "fastapi", "gin"
+	CodeFiles     map[string]string `json:"code_files"`
+	TestFramework string            `json:"test_framework,omitempty"` // "jest", "pytest", "go test"
 }
 
 // ============================================================================
@@ -890,9 +891,9 @@ func getDefaultTestFramework(stack string) string {
 // GetTestPyramidRecommendations returns recommended test distribution
 func GetTestPyramidRecommendations() map[string]int {
 	return map[string]int{
-		"unit":          70, // 70% unit tests
-		"integration":   20, // 20% integration tests
-		"e2e":           10, // 10% E2E tests
+		"unit":        70, // 70% unit tests
+		"integration": 20, // 20% integration tests
+		"e2e":         10, // 10% E2E tests
 	}
 }
 

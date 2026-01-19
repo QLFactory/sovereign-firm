@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/llm"
 )
 
@@ -227,6 +228,42 @@ func (p *AgentPool) routeMessage(msg Message) {
 			}
 		}
 	}
+}
+
+// Satisfy AgentMessaging interface
+
+// GetAgents returns a list of available agents for a project
+func (p *AgentPool) GetAgents(projectID string) []map[string]string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	results := make([]map[string]string, 0)
+	if projectAgents, ok := p.byProject[projectID]; ok {
+		for _, agent := range projectAgents {
+			results = append(results, map[string]string{
+				"id":   agent.ID,
+				"name": agent.Name,
+				"role": agent.Role,
+			})
+		}
+	}
+	return results
+}
+
+// SendMessage sends a message between agents
+func (p *AgentPool) SendMessage(from, to, subject string, content interface{}) error {
+	msg := Message{
+		ID:        uuid.New().String(), // Need to import uuid in pool.go if not there
+		Type:      MessageQuestion,     // Default for tool-initiated messaging
+		From:      from,
+		To:        to,
+		Subject:   subject,
+		Content:   content,
+		Timestamp: time.Now(),
+	}
+
+	p.messageBus <- msg
+	return nil
 }
 
 // cleanup periodically removes terminated and idle agents

@@ -16,6 +16,7 @@ import type {
   RegisterRequest,
   AuthResponse,
   RefreshResponse,
+  Invitation,
 } from "./types";
 
 const API_BASE = "/api";
@@ -192,11 +193,35 @@ class ApiClient {
     }
   }
 
-  /**
-   * Get current user info
-   */
   async getCurrentUser(): Promise<User> {
     return this.request<User>("/auth/me");
+  }
+
+  /**
+   * List all users in the current tenant
+   */
+  async listUsers(): Promise<User[]> {
+    return this.request<User[]>("/users");
+  }
+
+  /**
+   * Update a user's role
+   */
+  async updateUserRole(userId: string, role: string): Promise<void> {
+    await this.request(`/users/${userId}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  /**
+   * Invite a new user
+   */
+  async inviteUser(email: string, role: string = "member"): Promise<Invitation> {
+    return this.request<Invitation>("/users/invite", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    });
   }
 
   // ==========================================================================
@@ -230,6 +255,7 @@ class ApiClient {
         }),
       });
       return {
+        id: response.id,
         workflow_id: response.workflow_id,
         status: "started",
       };
@@ -278,7 +304,7 @@ class ApiClient {
 
         // Transform to Project format
         return response.projects.map((p) => ({
-          id: p.workflow_id,
+          id: p.id,
           workflow_id: p.workflow_id,
           name: p.name,
           description: p.description,
@@ -350,6 +376,8 @@ class ApiClient {
     files_indexed?: number;
     chunks_created?: number;
     symbols_found?: number;
+    primary_lang?: string;
+    detected_stack?: string[];
     error?: string;
     phase?: string;
   }> {
@@ -358,6 +386,8 @@ class ApiClient {
       files_indexed?: number;
       chunks_created?: number;
       symbols_found?: number;
+      primary_lang?: string;
+      detected_stack?: string[];
       error?: string;
       phase?: string;
     }>(`/projects/${projectId}/import/status`);
@@ -456,11 +486,13 @@ export function saveProjectsToStorage(projects: Project[]): void {
 }
 
 export function createProjectFromConfig(
+  projectId: string,
   workflowId: string,
   config: ProjectConfig
 ): Project {
   return {
-    id: workflowId,
+    id: projectId,
+    workflow_id: workflowId,
     name: config.project_name,
     phase: "INTAKE",
     status: "running",

@@ -14,6 +14,13 @@ const (
 	TenantContextKey contextKey = "tenant_id"
 )
 
+var roleLevels = map[string]int{
+	"owner":  4,
+	"admin":  3,
+	"member": 2,
+	"viewer": 1,
+}
+
 // Middleware creates an authentication middleware
 type Middleware struct {
 	jwtManager *JWTManager
@@ -93,8 +100,8 @@ func (m *Middleware) OptionalAuth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireRole is a middleware that checks if the user has a specific role
-func (m *Middleware) RequireRole(roles ...string) func(http.Handler) http.Handler {
+// RequireMinRole is a middleware that checks if the user has at least the specified role level.
+func (m *Middleware) RequireMinRole(minRole string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims := GetClaims(r.Context())
@@ -103,11 +110,12 @@ func (m *Middleware) RequireRole(roles ...string) func(http.Handler) http.Handle
 				return
 			}
 
-			for _, role := range roles {
-				if claims.Role == role {
-					next.ServeHTTP(w, r)
-					return
-				}
+			userLevel := roleLevels[claims.Role]
+			requiredLevel := roleLevels[minRole]
+
+			if userLevel >= requiredLevel && requiredLevel > 0 {
+				next.ServeHTTP(w, r)
+				return
 			}
 
 			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)

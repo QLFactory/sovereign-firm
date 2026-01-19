@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -31,13 +32,15 @@ const (
 type DocumentType string
 
 const (
-	DocTypeCode        DocumentType = "code"         // Source code
-	DocTypePattern     DocumentType = "pattern"      // Design pattern or best practice
-	DocTypeDecision    DocumentType = "decision"     // Architectural decision
-	DocTypeSpec        DocumentType = "spec"         // Specification or requirement
+	DocTypeCode         DocumentType = "code"         // Source code
+	DocTypePattern      DocumentType = "pattern"      // Design pattern or best practice
+	DocTypeDecision     DocumentType = "decision"     // Architectural decision
+	DocTypeSpec         DocumentType = "spec"         // Specification or requirement
 	DocTypeConversation DocumentType = "conversation" // Chat history
-	DocTypeError       DocumentType = "error"        // Error and resolution
-	DocTypeTemplate    DocumentType = "template"     // Code template
+	DocTypeError        DocumentType = "error"        // Error and resolution
+	DocTypeTemplate     DocumentType = "template"     // Code template
+	DocTypeSymbol       DocumentType = "symbol"       // Code symbol (function, class, etc)
+	DocTypeManifest     DocumentType = "manifest"     // File index for incremental updates
 )
 
 // EnrichedDocument extends Document with additional metadata
@@ -51,7 +54,7 @@ type EnrichedDocument struct {
 	Language    string       `json:"language,omitempty"`
 	StartLine   int          `json:"start_line,omitempty"`
 	EndLine     int          `json:"end_line,omitempty"`
-	Score       float32      `json:"score,omitempty"`       // Relevance score from search
+	Score       float32      `json:"score,omitempty"` // Relevance score from search
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 	AccessCount int          `json:"access_count,omitempty"`
@@ -214,15 +217,15 @@ func (m *MultiLevelStore) AddBatch(ctx context.Context, docs []EnrichedDocument)
 
 // SearchOptions configures memory search behavior
 type SearchOptions struct {
-	Query      string       // Text query to embed and search
-	Vector     []float32    // Pre-computed embedding (optional)
-	Limit      int          // Max results per level
-	Levels     []MemoryLevel // Which levels to search (default: all)
-	ClientID   string       // Filter by client
-	ProjectID  string       // Filter by project
-	Types      []DocumentType // Filter by document type
-	Languages  []string     // Filter by programming language
-	MinScore   float32      // Minimum relevance score
+	Query     string         // Text query to embed and search
+	Vector    []float32      // Pre-computed embedding (optional)
+	Limit     int            // Max results per level
+	Levels    []MemoryLevel  // Which levels to search (default: all)
+	ClientID  string         // Filter by client
+	ProjectID string         // Filter by project
+	Types     []DocumentType // Filter by document type
+	Languages []string       // Filter by programming language
+	MinScore  float32        // Minimum relevance score
 }
 
 // SearchResult contains results from multi-level search
@@ -435,6 +438,74 @@ func (m *MultiLevelStore) StoreDecision(ctx context.Context, projectID, clientID
 	}
 
 	return m.Add(ctx, doc)
+}
+
+// StoreSymbols records a collection of symbols for a project
+func (m *MultiLevelStore) StoreSymbols(ctx context.Context, projectID, clientID string, symbols []EnrichedDocument) error {
+	// Ensure all have correct level and type
+	for i := range symbols {
+		symbols[i].Level = ProjectMemory
+		symbols[i].Type = DocTypeSymbol
+		symbols[i].ProjectID = projectID
+		symbols[i].ClientID = clientID
+	}
+	return m.AddBatch(ctx, symbols)
+}
+
+// GetProjectManifest retrieves the specialized manifest document for a project
+func (m *MultiLevelStore) GetProjectManifest(ctx context.Context, projectID, clientID string) (map[string]string, error) {
+	result, err := m.Search(ctx, SearchOptions{
+		Limit:     1,
+		Levels:    []MemoryLevel{ProjectMemory},
+		ClientID:  clientID,
+		ProjectID: projectID,
+		Types:     []DocumentType{DocTypeManifest},
+	})
+	if err != nil || len(result.Documents) == 0 {
+		return make(map[string]string), nil
+	}
+
+	var manifest map[string]string
+	if err := json.Unmarshal([]byte(result.Documents[0].Content), &manifest); err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+// StoreProjectManifest saves the file hash map for incremental indexing
+func (m *MultiLevelStore) StoreProjectManifest(ctx context.Context, projectID, clientID string, manifest map[string]string) error {
+	content, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+
+	doc := EnrichedDocument{
+		Document: Document{
+			ID:      fmt.Sprintf("manifest:%s", projectID),
+			Content: string(content),
+		},
+		Level:     ProjectMemory,
+		Type:      DocTypeManifest,
+		ClientID:  clientID,
+		ProjectID: projectID,
+	}
+
+	// Delete old manifest first to avoid duplication
+	m.DeleteByMetadata(ctx, ProjectMemory, map[string]interface{}{
+		"project_id": projectID,
+		"type":       string(DocTypeManifest),
+	})
+
+	return m.Add(ctx, doc)
+}
+
+// DeleteByMetadata removes documents matching specific metadata criteria
+func (m *MultiLevelStore) DeleteByMetadata(ctx context.Context, level MemoryLevel, where map[string]interface{}) error {
+	client, ok := m.clients[level]
+	if !ok {
+		return fmt.Errorf("unknown memory level: %s", level)
+	}
+	return client.DeleteByMetadata(ctx, where)
 }
 
 // StorePattern stores a reusable code pattern at global or client level

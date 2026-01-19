@@ -2,7 +2,10 @@ package activities
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +14,7 @@ import (
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/llm"
 	"github.com/qlfactory/sovereign-firm/pkg/sovereign/memory"
 	"github.com/qlfactory/sovereign-firm/pkg/treesitter"
+	"go.temporal.io/sdk/activity"
 )
 
 // BrownfieldAnalyzer performs comprehensive codebase analysis
@@ -66,6 +70,7 @@ type BrownfieldResult struct {
 	SymbolsFound    int                       `json:"symbols_found"`
 	Decisions       []string                  `json:"decisions"`
 	Recommendations []string                  `json:"recommendations"`
+	Symbols         []memory.EnrichedDocument `json:"symbols,omitempty"`
 	Errors          []string                  `json:"errors,omitempty"`
 }
 
@@ -106,7 +111,15 @@ func (b *BrownfieldAnalyzer) AnalyzeProject(ctx context.Context, params Brownfie
 		result.Decisions = append(result.Decisions, stackDecision)
 	}
 
-	// 2. Walk and index files
+	// 2. Load manifest for incremental indexing
+	oldManifest, err := b.store.GetProjectManifest(ctx, params.ProjectID, params.ClientID)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("failed to load manifest: %v", err))
+	}
+	newManifest := make(map[string]string)
+	seenPaths := make(map[string]bool)
+
+	// 3. Walk and index files
 	filesIndexed := 0
 	chunksCreated := 0
 	symbolsFound := 0
@@ -141,13 +154,32 @@ func (b *BrownfieldAnalyzer) AnalyzeProject(ctx context.Context, params Brownfie
 			return nil
 		}
 
+		relPath, _ := filepath.Rel(projectDir, path)
+		seenPaths[relPath] = true
+
+		// Calculate hash
+		hash, hashErr := b.calculateHash(path)
+		if hashErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("hash failed for %s: %v", relPath, hashErr))
+			return nil
+		}
+		newManifest[relPath] = hash
+
+		// Check if unchanged
+		if oldHash, exists := oldManifest[relPath]; exists && oldHash == hash {
+			return nil // Unchanged
+		}
+
 		// Read file
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(projectDir, path)
+		// If modified, cleanup old data first
+		if _, exists := oldManifest[relPath]; exists {
+			b.cleanupFileMetadata(ctx, params.ProjectID, relPath)
+		}
 
 		// Chunk the file
 		chunks, err := b.chunker.ChunkFile(ctx, path, content)
@@ -169,7 +201,9 @@ func (b *BrownfieldAnalyzer) AnalyzeProject(ctx context.Context, params Brownfie
 		// Count symbols from structure
 		structure, err := b.analyzer.AnalyzeFile(ctx, path, content)
 		if err == nil {
-			symbolsFound += len(structure.Functions) + len(structure.Classes) + len(structure.Types)
+			fileSymbols := collectSymbols(structure, params.ProjectID, params.ClientID, relPath)
+			result.Symbols = append(result.Symbols, fileSymbols...)
+			symbolsFound += len(fileSymbols)
 
 			// Store notable patterns globally if configured
 			if params.StoreGlobally && len(structure.Functions) > 0 {
@@ -188,6 +222,16 @@ func (b *BrownfieldAnalyzer) AnalyzeProject(ctx context.Context, params Brownfie
 			}
 		}
 
+		// Heartbeat every 10 files
+		if filesIndexed%10 == 0 {
+			activity.RecordHeartbeat(ctx, BrownfieldResult{
+				ProjectID:     params.ProjectID,
+				FilesIndexed:  filesIndexed,
+				ChunksCreated: chunksCreated,
+				SymbolsFound:  symbolsFound,
+			})
+		}
+
 		return nil
 	})
 
@@ -195,14 +239,66 @@ func (b *BrownfieldAnalyzer) AnalyzeProject(ctx context.Context, params Brownfie
 		result.Errors = append(result.Errors, fmt.Sprintf("walk failed: %v", err))
 	}
 
+	// 4. Handle deletions
+	for oldPath := range oldManifest {
+		if !seenPaths[oldPath] {
+			b.cleanupFileMetadata(ctx, params.ProjectID, oldPath)
+		}
+	}
+
+	// 5. Store update manifest
+	if err := b.store.StoreProjectManifest(ctx, params.ProjectID, params.ClientID, newManifest); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("failed to save manifest: %v", err))
+	}
+
 	result.FilesIndexed = filesIndexed
 	result.ChunksCreated = chunksCreated
 	result.SymbolsFound = symbolsFound
 
-	// 3. Generate recommendations
+	// 6. Store global symbol map
+	if len(result.Symbols) > 0 {
+		if err := b.store.StoreSymbols(ctx, params.ProjectID, params.ClientID, result.Symbols); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to store symbols: %v", err))
+		}
+	}
+
+	// 7. Generate recommendations
 	result.Recommendations = b.generateRecommendations(stack, filesIndexed, symbolsFound)
 
 	return result, nil
+}
+
+// calculateHash computes SHA256 hash of a file
+func (b *BrownfieldAnalyzer) calculateHash(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// cleanupFileMetadata removes all chunks and symbols for a single file
+func (b *BrownfieldAnalyzer) cleanupFileMetadata(ctx context.Context, projectID, filePath string) {
+	// Cleanup code chunks
+	b.store.DeleteByMetadata(ctx, memory.ProjectMemory, map[string]interface{}{
+		"project_id": projectID,
+		"file_path":  filePath,
+		"type":       string(memory.DocTypeCode),
+	})
+
+	// Cleanup symbols
+	b.store.DeleteByMetadata(ctx, memory.ProjectMemory, map[string]interface{}{
+		"project_id": projectID,
+		"file_path":  filePath,
+		"type":       string(memory.DocTypeSymbol),
+	})
 }
 
 // getProjectDir returns the project directory, handling both git clone and local paths
@@ -401,4 +497,44 @@ func hasFramework(frameworks []treesitter.Framework, target treesitter.Framework
 // QuickAnalyze performs a fast analysis without full indexing
 func (b *BrownfieldAnalyzer) QuickAnalyze(ctx context.Context, projectDir string) (*treesitter.ProjectStack, error) {
 	return b.analyzer.AnalyzeProject(ctx, projectDir)
+}
+
+func collectSymbols(structure *treesitter.CodeStructure, projectID, clientID, filePath string) []memory.EnrichedDocument {
+	var docs []memory.EnrichedDocument
+
+	processSymbolList := func(symbols []treesitter.Symbol, kind string) {
+		for _, s := range symbols {
+			docs = append(docs, memory.EnrichedDocument{
+				Document: memory.Document{
+					ID:      fmt.Sprintf("sym:%s:%s:%s", projectID, filePath, s.Name),
+					Content: fmt.Sprintf("%s %s in %s", kind, s.Name, filePath),
+					Metadata: map[string]interface{}{
+						"symbol_name": s.Name,
+						"symbol_kind": kind,
+						"signature":   s.Signature,
+						"exported":    s.Exported,
+						"parent":      s.Parent,
+					},
+				},
+				Level:     memory.ProjectMemory,
+				Type:      memory.DocTypeSymbol,
+				ProjectID: projectID,
+				ClientID:  clientID,
+				FilePath:  filePath,
+				StartLine: int(s.StartLine),
+				EndLine:   int(s.EndLine),
+			})
+
+			if len(s.Children) > 0 {
+				// Recursively process children? For now just flat list
+			}
+		}
+	}
+
+	processSymbolList(structure.Functions, "function")
+	processSymbolList(structure.Classes, "class")
+	processSymbolList(structure.Types, "type")
+	processSymbolList(structure.Variables, "variable")
+
+	return docs
 }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAppStore } from "../lib/store";
 import { PHASE_COLORS, getPhaseProgress } from "../lib/api/types";
-import type { Project, ProjectConfig, User } from "../lib/api/types";
+import type { Project, ProjectConfig, User, Invitation } from "../lib/api/types";
 
 // Dynamically import heavy components
 const PodConsole = dynamic(() => import("../components/PodConsole"), {
@@ -98,11 +98,10 @@ function Sidebar({
           <div className="text-caption text-[var(--silver)] px-3 mb-2">Workspace</div>
           <button
             onClick={() => setActiveView("projects")}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-              activeView === "projects"
-                ? "bg-[var(--slate)] text-[var(--ivory)]"
-                : "text-[var(--silver)] hover:bg-[var(--graphite)] hover:text-[var(--pearl)]"
-            }`}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${activeView === "projects"
+              ? "bg-[var(--slate)] text-[var(--ivory)]"
+              : "text-[var(--silver)] hover:bg-[var(--graphite)] hover:text-[var(--pearl)]"
+              }`}
           >
             <svg
               width="18"
@@ -137,6 +136,35 @@ function Sidebar({
           </Link>
         </div>
 
+        {/* Admin section */}
+        {(user?.role === "owner" || user?.role === "admin") && (
+          <div className="mb-4">
+            <div className="text-caption text-[var(--silver)] px-3 mb-2">Admin</div>
+            <button
+              onClick={() => setActiveView("team")}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${activeView === "team"
+                ? "bg-[var(--slate)] text-[var(--ivory)]"
+                : "text-[var(--silver)] hover:bg-[var(--graphite)] hover:text-[var(--pearl)]"
+                }`}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              Team Management
+            </button>
+          </div>
+        )}
+
         {/* Recent Projects */}
         {projects.length > 0 && (
           <div className="mb-4">
@@ -145,20 +173,18 @@ function Sidebar({
               <button
                 key={project.id}
                 onClick={() => onSelectProject(project)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  selectedProject?.id === project.id
-                    ? "bg-[var(--slate)] text-[var(--ivory)]"
-                    : "text-[var(--silver)] hover:bg-[var(--graphite)] hover:text-[var(--pearl)]"
-                }`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${selectedProject?.id === project.id
+                  ? "bg-[var(--slate)] text-[var(--ivory)]"
+                  : "text-[var(--silver)] hover:bg-[var(--graphite)] hover:text-[var(--pearl)]"
+                  }`}
               >
                 <div
-                  className={`w-2 h-2 rounded-full ${
-                    project.phase === "COMPLETE"
-                      ? "bg-[var(--emerald-glow)]"
-                      : project.phase === "FAILED"
+                  className={`w-2 h-2 rounded-full ${project.phase === "COMPLETE"
+                    ? "bg-[var(--emerald-glow)]"
+                    : project.phase === "FAILED"
                       ? "bg-[var(--rose-glow)]"
                       : "bg-[var(--amber-glow)] animate-pulse"
-                  }`}
+                    }`}
                 />
                 <span className="truncate">{project.name}</span>
               </button>
@@ -382,11 +408,10 @@ function CreateProjectModal({
                   className="sr-only"
                 />
                 <div
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    config.enable_full_stack
-                      ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
-                      : "border-[var(--steel)]"
-                  }`}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${config.enable_full_stack
+                    ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
+                    : "border-[var(--steel)]"
+                    }`}
                 >
                   {config.enable_full_stack && (
                     <svg
@@ -414,11 +439,10 @@ function CreateProjectModal({
                   className="sr-only"
                 />
                 <div
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    config.enable_deployment
-                      ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
-                      : "border-[var(--steel)]"
-                  }`}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${config.enable_deployment
+                    ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
+                    : "border-[var(--steel)]"
+                    }`}
                 >
                   {config.enable_deployment && (
                     <svg
@@ -446,11 +470,10 @@ function CreateProjectModal({
                   className="sr-only"
                 />
                 <div
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                    config.enable_sre
-                      ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
-                      : "border-[var(--steel)]"
-                  }`}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${config.enable_sre
+                    ? "bg-[var(--cyan-glow)] border-[var(--cyan-glow)]"
+                    : "border-[var(--steel)]"
+                    }`}
                 >
                   {config.enable_sre && (
                     <svg
@@ -576,19 +599,18 @@ function ProjectCard({
         <span>Created {new Date(project.createdAt || project.created_at || Date.now()).toLocaleDateString()}</span>
         <span className="flex items-center gap-1">
           <span
-            className={`w-2 h-2 rounded-full ${
-              project.phase === "COMPLETE"
-                ? "bg-[var(--emerald-glow)]"
-                : project.phase === "FAILED"
+            className={`w-2 h-2 rounded-full ${project.phase === "COMPLETE"
+              ? "bg-[var(--emerald-glow)]"
+              : project.phase === "FAILED"
                 ? "bg-[var(--rose-glow)]"
                 : "bg-[var(--amber-glow)] animate-pulse"
-            }`}
+              }`}
           />
           {project.phase === "COMPLETE"
             ? "Done"
             : project.phase === "FAILED"
-            ? "Failed"
-            : "In Progress"}
+              ? "Failed"
+              : "In Progress"}
         </span>
       </div>
     </div>
@@ -665,6 +687,171 @@ function ProjectsView({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Team management view
+function TeamView() {
+  const team = useAppStore((state) => state.team);
+  const loadTeam = useAppStore((state) => state.loadTeam);
+  const updateUserRole = useAppStore((state) => state.updateUserRole);
+  const inviteUser = useAppStore((state) => state.inviteUser);
+  const isLoading = useAppStore((state) => state.isLoading);
+  const currentUser = useAppStore((state) => state.user);
+
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [lastInvitation, setLastInvitation] = useState<Invitation | null>(null);
+  const [isInviting, setIsInviting] = useState(false);
+
+  useEffect(() => {
+    loadTeam();
+  }, [loadTeam]);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    setIsInviting(true);
+    setLastInvitation(null);
+    const invitation = await inviteUser(inviteEmail, inviteRole);
+    if (invitation) {
+      setLastInvitation(invitation);
+      setInviteEmail("");
+    }
+    setIsInviting(false);
+    loadTeam();
+  };
+
+  return (
+    <div className="p-8 h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--ivory)] mb-1">Team</h1>
+            <p className="text-[var(--silver)]">
+              Manage your organization's members and permissions
+            </p>
+          </div>
+        </div>
+
+        {/* Invite section */}
+        <div className="glass-card p-6 rounded-2xl mb-8">
+          <h2 className="text-lg font-semibold text-[var(--ivory)] mb-4">Invite Member</h2>
+          <form onSubmit={handleInvite} className="flex gap-3 mb-4">
+            <input
+              type="email"
+              className="input flex-1"
+              placeholder="colleague@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+            />
+            <select
+              className="input select w-32"
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+            <button
+              type="submit"
+              className="btn btn-primary px-6"
+              disabled={isInviting || !inviteEmail}
+            >
+              {isInviting ? "Inviting..." : "Send Invite"}
+            </button>
+          </form>
+
+          {lastInvitation && (
+            <div className="p-4 rounded-lg bg-[var(--slate)] border border-[var(--cyan-glow)]/30 animate-scale-in">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-[var(--ivory)] mb-1">Invitation created!</div>
+                  <div className="text-xs text-[var(--silver)] truncate">
+                    Share this link with {lastInvitation.email}:
+                  </div>
+                  <div className="text-sm text-[var(--cyan-glow)] font-mono mt-1 p-2 bg-[var(--void)] rounded border border-[var(--steel)] truncate">
+                    {window.location.origin}/register?token={lastInvitation.token}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const link = `${window.location.origin}/register?token=${lastInvitation.token}`;
+                    navigator.clipboard.writeText(link);
+                    // Could add a toast here
+                  }}
+                  className="btn btn-ghost btn-icon whitespace-nowrap"
+                  title="Copy link"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Members list */}
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-[var(--graphite)] border-b border-[var(--steel)]">
+                <th className="px-6 py-4 text-xs font-semibold text-[var(--silver)] uppercase tracking-wider">Member</th>
+                <th className="px-6 py-4 text-xs font-semibold text-[var(--silver)] uppercase tracking-wider">Role</th>
+                <th className="px-6 py-4 text-xs font-semibold text-[var(--silver)] uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--steel)]">
+              {team.map((member) => (
+                <tr key={member.id} className="hover:bg-[var(--slate)] transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[var(--graphite)] flex items-center justify-center text-xs font-bold text-[var(--cyan-glow)]">
+                        {member.email.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-[var(--ivory)]">{member.name || "Unnamed"}</div>
+                        <div className="text-xs text-[var(--silver)]">{member.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`badge ${member.role === 'owner' ? 'badge-violet' :
+                      member.role === 'admin' ? 'badge-cyan' :
+                        member.role === 'member' ? 'badge-emerald' : 'badge-slate'
+                      }`}>
+                      {member.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {currentUser?.id !== member.id && member.role !== 'owner' && (
+                      <select
+                        className="bg-[var(--graphite)] border border-[var(--steel)] rounded px-2 py-1 text-xs text-[var(--silver)] outline-none focus:border-[var(--cyan-glow)]"
+                        value={member.role}
+                        onChange={(e) => updateUserRole(member.id, e.target.value)}
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {isLoading && team.length === 0 && (
+            <div className="flex items-center justify-center p-12">
+              <div className="spinner w-8 h-8" />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -758,6 +945,8 @@ export default function Dashboard() {
               onNewProject={() => setShowCreateModal(true)}
             />
           </div>
+        ) : activeView === "team" ? (
+          <TeamView />
         ) : activeView === "console" && currentProject ? (
           <Suspense fallback={<DashboardSkeleton />}>
             <PodConsole key={currentProject.id} workflowId={currentProject.id} />

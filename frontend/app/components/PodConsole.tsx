@@ -572,55 +572,60 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
       const isDev = line.startsWith("Dev:");
       const isQA = line.startsWith("QA:");
 
-      let bgColor = "bg-zinc-800";
-      let textColor = "text-zinc-300";
+      let bgColor = "bg-[var(--glass-highlight)]";
+      let textColor = "text-[var(--pearl)]";
+      let borderColor = "border-[var(--glass-border)]";
       let label = "";
 
       if (isUser) {
-        bgColor = "bg-blue-900/50";
-        textColor = "text-blue-200";
+        bgColor = "bg-[var(--cyan-glow)]/10";
+        textColor = "text-[var(--cyan-glow)]";
+        borderColor = "border-[var(--cyan-glow)]/20";
         label = "You";
       } else if (isPM) {
-        bgColor = "bg-purple-900/50";
-        textColor = "text-purple-200";
+        bgColor = "bg-[var(--violet-glow)]/10";
+        textColor = "text-[var(--violet-glow)]";
+        borderColor = "border-[var(--violet-glow)]/20";
         label = "PM Agent";
       } else if (isDev) {
-        bgColor = "bg-green-900/50";
-        textColor = "text-green-200";
+        bgColor = "bg-[var(--emerald-glow)]/10";
+        textColor = "text-[var(--emerald-glow)]";
+        borderColor = "border-[var(--emerald-glow)]/20";
         label = "Dev Agent";
       } else if (isQA) {
-        bgColor = "bg-yellow-900/50";
-        textColor = "text-yellow-200";
+        bgColor = "bg-[var(--amber-glow)]/10";
+        textColor = "text-[var(--amber-glow)]";
+        borderColor = "border-[var(--amber-glow)]/20";
         label = "QA Agent";
       }
 
       const content = line.replace(/^(User|You|PM|Dev|QA):/, "").trim();
 
       return (
-        <div key={i} className={`p-3 rounded-lg mb-2 ${bgColor}`}>
+        <div key={i} className={`p-4 rounded-xl mb-3 border glass ${bgColor} ${borderColor} animate-fade-in`}>
           {label && (
-            <div className={`text-xs font-semibold mb-1 ${textColor}`}>{label}</div>
+            <div className={`text-[10px] uppercase font-bold tracking-widest mb-1 opacity-70 ${textColor}`}>{label}</div>
           )}
-          <div className={`text-sm whitespace-pre-wrap ${textColor}`}>{content}</div>
+          <div className={`text-sm leading-relaxed ${textColor}`}>{content}</div>
         </div>
       );
     });
   };
 
   return (
-    <div className="flex h-screen w-full bg-zinc-950 text-white">
+    <div className="flex h-screen w-full bg-[var(--obsidian)] text-[var(--ivory)] font-[var(--font-body)]">
       {/* Left Panel - Chat/Spec/Files */}
-      <div className="w-1/3 flex flex-col border-r border-zinc-800 min-w-[350px]">
+      <div className="w-1/3 flex flex-col border-r border-[var(--glass-border)] min-w-[350px] glass">
         {/* Header */}
-        <div className="p-4 border-b border-zinc-800 bg-zinc-900">
-          <div className="flex justify-between items-start mb-3">
+        <div className="p-4 border-b border-[var(--glass-border)] bg-[var(--carbon)]/50">
+          <div className="flex justify-between items-start mb-4">
             <div>
-              <h2 className="font-bold text-lg">Project Pod</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${phaseColors[currentPhase] || "bg-zinc-700"}`}>
+              <h2 className="font-bold text-xl text-gradient-white tracking-tight">Project Pod</h2>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold ${phaseColors[currentPhase] || "badge-cyan"}`}>
                   {currentPhase}
                 </span>
-                <span className={`text-xs ${status.includes("Error") ? "text-red-400" : "text-zinc-400"}`}>
+                <span className={`text-[11px] font-medium tracking-wide ${status.includes("Error") ? "text-[var(--rose-glow)]" : "text-[var(--silver)]"}`}>
                   {status}
                 </span>
               </div>
@@ -629,14 +634,14 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
               {status.includes("Error") && (
                 <button
                   onClick={retryStart}
-                  className="text-xs bg-red-900 px-3 py-1 rounded hover:bg-red-800"
+                  className="btn btn-secondary px-3 py-1.5 text-xs bg-red-900/20 text-red-500 border-red-500/50"
                 >
                   Retry
                 </button>
               )}
               <button
                 onClick={startNewPod}
-                className="text-xs bg-zinc-700 px-3 py-1 rounded hover:bg-zinc-600"
+                className="btn btn-secondary px-3 py-1.5 text-xs hover:border-[var(--cyan-glow)] hover:text-[var(--cyan-glow)]"
                 title="Start a new project pod"
               >
                 + New Pod
@@ -650,25 +655,26 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                  activeTab === tab
-                    ? "bg-blue-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wider transition-all duration-300 ${activeTab === tab
+                  ? "bg-[var(--cyan-glow)] text-[var(--void)] shadow-glow-cyan"
+                  : "bg-[var(--glass-highlight)] text-[var(--silver)] hover:text-[var(--ivory)] hover:bg-[var(--glass-border)]"
+                  }`}
               >
                 {tab === "TASKS" && "📊 "}
                 {tab === "AGENTS" && "🤖 "}
                 {tab}
                 {tab === "FILES" && fileList.length > 0 && (
-                  <span className="ml-1 bg-zinc-700 px-1.5 rounded">{fileList.length}</span>
+                  <span className={`ml-1 px-1.5 rounded shadow-inner ${activeTab === tab ? "bg-[var(--void)]/20" : "bg-[var(--carbon)]"}`}>
+                    {fileList.length}
+                  </span>
                 )}
                 {tab === "TASKS" && dagState && (
-                  <span className="ml-1 bg-zinc-700 px-1.5 rounded">
+                  <span className={`ml-1 px-1.5 rounded shadow-inner ${activeTab === tab ? "bg-[var(--void)]/20" : "bg-[var(--carbon)]"}`}>
                     {dagState.completed}/{dagState.total}
                   </span>
                 )}
                 {tab === "AGENTS" && activeAgents.length > 0 && (
-                  <span className="ml-1 bg-green-700 px-1.5 rounded animate-pulse">
+                  <span className={`ml-1 px-1.5 rounded animate-pulse ${activeTab === tab ? "bg-[var(--void)]/20" : "bg-[var(--emerald-glow)]/30 text-[var(--emerald-glow)]"}`}>
                     {activeAgents.length}
                   </span>
                 )}
@@ -707,7 +713,7 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
           )}
 
           {activeTab === "FILES" && (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {fileList.length > 0 ? (
                 fileList.map((filepath) => (
                   <button
@@ -716,19 +722,19 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
                       setSelectedFile(filepath);
                       setRightTab("CODE");
                     }}
-                    className={`w-full text-left px-3 py-2 rounded text-sm font-mono transition-colors ${
-                      selectedFile === filepath
-                        ? "bg-blue-600 text-white"
-                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-                    }`}
+                    className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-mono transition-all duration-200 border ${selectedFile === filepath
+                      ? "bg-[var(--cyan-glow)]/10 border-[var(--cyan-glow)]/40 text-[var(--cyan-glow)] shadow-glow-cyan/20"
+                      : "bg-transparent border-transparent text-[var(--silver)] hover:bg-[var(--glass-highlight)] hover:text-[var(--pearl)]"
+                      }`}
                   >
+                    <span className="opacity-50 mr-2 text-[10px]">📄</span>
                     {filepath}
                   </button>
                 ))
               ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-3">📁</div>
-                  <p className="text-zinc-500 text-sm">
+                <div className="text-center py-12 glass rounded-2xl">
+                  <div className="text-4xl mb-4 opacity-50">📁</div>
+                  <p className="text-[var(--silver)] text-sm px-4">
                     No files generated yet. Approve your spec to start coding.
                   </p>
                 </div>
@@ -760,10 +766,10 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900">
+        <div className="p-4 border-t border-[var(--glass-border)] bg-[var(--carbon)]/50">
           <div className="flex gap-2">
             <input
-              className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="flex-1 bg-[var(--obsidian)] border border-[var(--steel)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--cyan-glow)] focus:ring-1 focus:ring-[var(--cyan-glow)]/50 transition-all placeholder:text-[var(--silver)]/50"
               placeholder={
                 currentPhase === "DISCOVERY"
                   ? "Describe your app or type /approve..."
@@ -776,7 +782,7 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
             <button
               onClick={sendMessage}
               disabled={!input.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:cursor-not-allowed px-5 rounded-lg font-semibold text-sm transition-colors"
+              className="btn btn-primary px-6 rounded-xl text-sm font-bold"
             >
               Send
             </button>
@@ -790,17 +796,19 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
       {/* Right Panel - Preview/Code/Terminal */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Tab Bar */}
-        <div className="flex text-sm font-medium border-b border-zinc-800 bg-zinc-900 overflow-x-auto">
+        <div className="flex text-[11px] font-bold tracking-widest uppercase border-b border-[var(--glass-border)] bg-[var(--carbon)]/30 backdrop-blur-md overflow-x-auto">
           {(["PREVIEW", "CODE", "TERMINAL", "CI", "EVENTS"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setRightTab(tab)}
-              className={`px-4 py-3 transition-colors whitespace-nowrap flex items-center gap-1 ${
-                rightTab === tab
-                  ? "bg-zinc-800 text-white border-b-2 border-blue-500"
-                  : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
-              }`}
+              className={`px-6 py-4 transition-all duration-300 relative whitespace-nowrap flex items-center gap-2 ${rightTab === tab
+                  ? "text-[var(--cyan-glow)]"
+                  : "text-[var(--silver)] hover:text-[var(--ivory)] hover:bg-[var(--glass-highlight)]"
+                }`}
             >
+              {rightTab === tab && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--cyan-glow)] shadow-glow-cyan" />
+              )}
               {tab === "PREVIEW" && "▶ "}
               {tab === "CODE" && "📝 "}
               {tab === "TERMINAL" && "⌨ "}
@@ -808,15 +816,14 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
               {tab === "EVENTS" && "📡 "}
               {tab}
               {tab === "CI" && ciStages.length > 0 && (
-                <span className={`ml-1 text-xs px-1.5 rounded ${
-                  ciStages.some(s => !s.success) ? "bg-red-700" :
-                  ciStages.length === 3 ? "bg-green-700" : "bg-yellow-700"
-                }`}>
+                <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded shadow-glow-rose/20 ${ciStages.some(s => !s.success) ? "bg-[var(--rose-glow)]/20 text-[var(--rose-glow)]" :
+                    ciStages.length === 3 ? "bg-[var(--emerald-glow)]/20 text-[var(--emerald-glow)]" : "bg-[var(--amber-glow)]/20 text-[var(--amber-glow)]"
+                  }`}>
                   {ciStages.filter(s => s.success).length}/3
                 </span>
               )}
               {tab === "EVENTS" && streamEvents.length > 0 && (
-                <span className="ml-1 text-xs bg-zinc-700 px-1.5 rounded">
+                <span className="ml-1 text-[10px] bg-[var(--carbon)] px-1.5 py-0.5 rounded text-[var(--silver)] border border-[var(--glass-border)]">
                   {streamEvents.length}
                 </span>
               )}
@@ -825,10 +832,12 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 bg-zinc-950">
+        <div className="flex-1 min-h-0 bg-[var(--void)] relative">
+          <div className="absolute inset-0 grid-overlay opacity-30 pointer-events-none" />
+
           {/* Preview Tab - WebContainer */}
           {rightTab === "PREVIEW" && (
-            <div className="h-full">
+            <div className="h-full relative z-10 animate-fade-in">
               <WebContainerPreview
                 files={files}
                 onTerminalOutput={addTerminalLine}
@@ -838,7 +847,7 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
 
           {/* Code Tab - Sandpack with editor */}
           {rightTab === "CODE" && (
-            <div className="h-full">
+            <div className="h-full relative z-10 animate-fade-in">
               <SandpackPreview
                 files={files}
                 activeFile={selectedFile || undefined}
@@ -852,32 +861,37 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
 
           {/* Terminal Tab */}
           {rightTab === "TERMINAL" && (
-            <div className="h-full overflow-auto p-4 font-mono text-sm bg-zinc-950">
-              <div className="text-green-400 mb-2">$ Sovereign Firm Terminal</div>
+            <div className="h-full overflow-auto p-6 font-mono text-sm bg-[var(--void)] relative z-10 animate-fade-in">
+              <div className="text-[var(--emerald-glow)] mb-4 font-bold tracking-tight opacity-80 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[var(--emerald-glow)] animate-pulse" />
+                Sovereign Firm Console — v3.0
+              </div>
               {terminalOutput.length > 0 ? (
-                terminalOutput.map((line, i) => (
-                  <div
-                    key={i}
-                    className={`whitespace-pre-wrap ${
-                      line.includes("❌") ? "text-red-400" :
-                      line.includes("✅") ? "text-green-400" :
-                      line.includes("📍") ? "text-blue-400" :
-                      line.includes("📝") ? "text-yellow-400" :
-                      "text-zinc-400"
-                    }`}
-                  >
-                    {line}
-                  </div>
-                ))
+                <div className="space-y-1">
+                  {terminalOutput.map((line, i) => (
+                    <div
+                      key={i}
+                      className={`whitespace-pre-wrap leading-relaxed ${line.includes("❌") ? "text-[var(--rose-glow)]" :
+                          line.includes("✅") ? "text-[var(--emerald-glow)]" :
+                            line.includes("📍") ? "text-[var(--cyan-glow)]" :
+                              line.includes("📝") ? "text-[var(--amber-glow)]" :
+                                "text-[var(--silver)]"
+                        }`}
+                    >
+                      <span className="opacity-30 mr-2">›</span>
+                      {line}
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="text-zinc-600">Waiting for activity...</div>
+                <div className="text-[var(--silver)]/30 italic">Awaiting neural orchestration events...</div>
               )}
             </div>
           )}
 
           {/* CI Tab - Phase 4 */}
           {rightTab === "CI" && (
-            <div className="h-full">
+            <div className="h-full relative z-10 animate-fade-in">
               <CIStatusPanel
                 stages={ciStages}
                 currentStage={currentCIStage}
@@ -893,7 +907,7 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
 
           {/* Events Tab - Phase 4 */}
           {rightTab === "EVENTS" && (
-            <div className="h-full">
+            <div className="h-full relative z-10 animate-fade-in">
               <ExecutionEventFeed
                 events={streamEvents}
                 onEventClick={(event) => {

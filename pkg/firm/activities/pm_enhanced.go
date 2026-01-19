@@ -29,46 +29,46 @@ func NewEnhancedPMAgent() *EnhancedPMAgent {
 
 // RequirementsDocument represents a structured requirements document
 type RequirementsDocument struct {
-	ProjectName     string              `json:"project_name"`
-	Version         string              `json:"version"`
-	CreatedAt       string              `json:"created_at"`
-	Overview        string              `json:"overview"`
-	Objectives      []string            `json:"objectives"`
-	Stakeholders    []Stakeholder       `json:"stakeholders"`
-	Scope           ProjectScope        `json:"scope"`
-	FunctionalReqs  []Requirement       `json:"functional_requirements"`
+	ProjectName       string            `json:"project_name"`
+	Version           string            `json:"version"`
+	CreatedAt         string            `json:"created_at"`
+	Overview          string            `json:"overview"`
+	Objectives        []string          `json:"objectives"`
+	Stakeholders      []Stakeholder     `json:"stakeholders"`
+	Scope             ProjectScope      `json:"scope"`
+	FunctionalReqs    []Requirement     `json:"functional_requirements"`
 	NonFunctionalReqs []Requirement     `json:"non_functional_requirements"`
-	Constraints     []string            `json:"constraints"`
-	Assumptions     []string            `json:"assumptions"`
-	Risks           []Risk              `json:"risks"`
-	Glossary        map[string]string   `json:"glossary,omitempty"`
+	Constraints       []string          `json:"constraints"`
+	Assumptions       []string          `json:"assumptions"`
+	Risks             []Risk            `json:"risks"`
+	Glossary          map[string]string `json:"glossary,omitempty"`
 }
 
 // Stakeholder represents a project stakeholder
 type Stakeholder struct {
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	Influence   string `json:"influence"`   // "high", "medium", "low"
-	Interest    string `json:"interest"`    // "high", "medium", "low"
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	Influence    string `json:"influence"` // "high", "medium", "low"
+	Interest     string `json:"interest"`  // "high", "medium", "low"
 	Expectations string `json:"expectations"`
 }
 
 // ProjectScope defines what's in and out of scope
 type ProjectScope struct {
-	InScope     []string `json:"in_scope"`
-	OutOfScope  []string `json:"out_of_scope"`
+	InScope      []string `json:"in_scope"`
+	OutOfScope   []string `json:"out_of_scope"`
 	Deliverables []string `json:"deliverables"`
 }
 
 // Requirement represents a single requirement
 type Requirement struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Priority    string   `json:"priority"`    // "must", "should", "could", "wont"
-	Category    string   `json:"category"`
+	ID                 string   `json:"id"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	Priority           string   `json:"priority"` // "must", "should", "could", "wont"
+	Category           string   `json:"category"`
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
-	Dependencies []string `json:"dependencies,omitempty"`
+	Dependencies       []string `json:"dependencies,omitempty"`
 }
 
 // Risk represents a project risk
@@ -83,51 +83,51 @@ type Risk struct {
 
 // ComplexityScore represents the complexity analysis of a project
 type ComplexityScore struct {
-	Overall           string            `json:"overall"`           // "trivial", "simple", "moderate", "complex", "very_complex"
-	Score             int               `json:"score"`             // 1-10
-	Dimensions        ComplexityDimensions `json:"dimensions"`
-	Factors           []ComplexityFactor `json:"factors"`
-	Recommendations   []string          `json:"recommendations"`
-	RiskLevel         string            `json:"risk_level"`        // "low", "medium", "high", "critical"
+	Overall         string               `json:"overall"` // "trivial", "simple", "moderate", "complex", "very_complex"
+	Score           int                  `json:"score"`   // 1-10
+	Dimensions      ComplexityDimensions `json:"dimensions"`
+	Factors         []ComplexityFactor   `json:"factors"`
+	Recommendations []string             `json:"recommendations"`
+	RiskLevel       string               `json:"risk_level"` // "low", "medium", "high", "critical"
 }
 
 // ComplexityDimensions breaks down complexity by category
 type ComplexityDimensions struct {
-	Technical       int `json:"technical"`        // 1-10
-	Business        int `json:"business"`         // 1-10
-	Integration     int `json:"integration"`      // 1-10
-	DataComplexity  int `json:"data_complexity"`  // 1-10
-	TeamSize        int `json:"team_size"`        // 1-10
-	Timeline        int `json:"timeline"`         // 1-10
+	Technical      int `json:"technical"`       // 1-10
+	Business       int `json:"business"`        // 1-10
+	Integration    int `json:"integration"`     // 1-10
+	DataComplexity int `json:"data_complexity"` // 1-10
+	TeamSize       int `json:"team_size"`       // 1-10
+	Timeline       int `json:"timeline"`        // 1-10
 }
 
 // ComplexityFactor represents a specific factor affecting complexity
 type ComplexityFactor struct {
 	Factor      string `json:"factor"`
-	Impact      string `json:"impact"`      // "increases", "decreases"
-	Severity    string `json:"severity"`    // "minor", "moderate", "major"
+	Impact      string `json:"impact"`   // "increases", "decreases"
+	Severity    string `json:"severity"` // "minor", "moderate", "major"
 	Description string `json:"description"`
 }
 
 // EffortEstimate represents the effort estimation for a project
 type EffortEstimate struct {
-	TotalStoryPoints  int               `json:"total_story_points"`
-	TotalHours        int               `json:"total_hours"`
-	TotalDays         int               `json:"total_days"`
-	Confidence        string            `json:"confidence"`      // "low", "medium", "high"
-	Breakdown         []EffortBreakdown `json:"breakdown"`
+	TotalStoryPoints   int                `json:"total_story_points"`
+	TotalHours         int                `json:"total_hours"`
+	TotalDays          int                `json:"total_days"`
+	Confidence         string             `json:"confidence"` // "low", "medium", "high"
+	Breakdown          []EffortBreakdown  `json:"breakdown"`
 	TeamRecommendation TeamRecommendation `json:"team_recommendation"`
-	Assumptions       []string          `json:"assumptions"`
-	Caveats           []string          `json:"caveats"`
+	Assumptions        []string           `json:"assumptions"`
+	Caveats            []string           `json:"caveats"`
 }
 
 // EffortBreakdown shows effort by component/feature
 type EffortBreakdown struct {
-	Component     string `json:"component"`
-	StoryPoints   int    `json:"story_points"`
-	Hours         int    `json:"hours"`
-	Complexity    string `json:"complexity"`
-	Notes         string `json:"notes,omitempty"`
+	Component   string `json:"component"`
+	StoryPoints int    `json:"story_points"`
+	Hours       int    `json:"hours"`
+	Complexity  string `json:"complexity"`
+	Notes       string `json:"notes,omitempty"`
 }
 
 // TeamRecommendation suggests team composition
@@ -135,35 +135,35 @@ type TeamRecommendation struct {
 	MinTeamSize     int      `json:"min_team_size"`
 	OptimalTeamSize int      `json:"optimal_team_size"`
 	Roles           []string `json:"roles"`
-	AgentTypes      []string `json:"agent_types"`  // AI agents needed
+	AgentTypes      []string `json:"agent_types"` // AI agents needed
 }
 
 // ProjectPlan represents a complete project plan
 type ProjectPlan struct {
-	ProjectName     string            `json:"project_name"`
-	Version         string            `json:"version"`
-	CreatedAt       string            `json:"created_at"`
-	StartDate       string            `json:"start_date"`
-	EndDate         string            `json:"end_date"`
-	Methodology     string            `json:"methodology"`     // "agile", "waterfall", "hybrid"
-	SprintDuration  int               `json:"sprint_duration"` // days
-	Phases          []ProjectPhase    `json:"phases"`
-	Milestones      []Milestone       `json:"milestones"`
-	Sprints         []Sprint          `json:"sprints,omitempty"`
-	Dependencies    []TaskDependency  `json:"dependencies"`
-	CriticalPath    []string          `json:"critical_path"`
-	Resources       ResourcePlan      `json:"resources"`
+	ProjectName    string           `json:"project_name"`
+	Version        string           `json:"version"`
+	CreatedAt      string           `json:"created_at"`
+	StartDate      string           `json:"start_date"`
+	EndDate        string           `json:"end_date"`
+	Methodology    string           `json:"methodology"`     // "agile", "waterfall", "hybrid"
+	SprintDuration int              `json:"sprint_duration"` // days
+	Phases         []ProjectPhase   `json:"phases"`
+	Milestones     []Milestone      `json:"milestones"`
+	Sprints        []Sprint         `json:"sprints,omitempty"`
+	Dependencies   []TaskDependency `json:"dependencies"`
+	CriticalPath   []string         `json:"critical_path"`
+	Resources      ResourcePlan     `json:"resources"`
 }
 
 // ProjectPhase represents a major phase
 type ProjectPhase struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	StartDate   string   `json:"start_date"`
-	EndDate     string   `json:"end_date"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	StartDate    string   `json:"start_date"`
+	EndDate      string   `json:"end_date"`
 	Deliverables []string `json:"deliverables"`
-	Tasks       []Task   `json:"tasks"`
+	Tasks        []Task   `json:"tasks"`
 }
 
 // Milestone represents a project milestone
@@ -183,22 +183,22 @@ type Sprint struct {
 	StartDate   string   `json:"start_date"`
 	EndDate     string   `json:"end_date"`
 	Goal        string   `json:"goal"`
-	Capacity    int      `json:"capacity"`      // story points
-	PlannedWork []string `json:"planned_work"`  // task IDs
+	Capacity    int      `json:"capacity"`     // story points
+	PlannedWork []string `json:"planned_work"` // task IDs
 }
 
 // Task represents a project task
 type Task struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  string   `json:"description"`
-	Type         string   `json:"type"`         // "development", "testing", "design", etc.
-	Priority     string   `json:"priority"`
-	StoryPoints  int      `json:"story_points"`
-	EstimatedHours int    `json:"estimated_hours"`
-	AssignedTo   string   `json:"assigned_to,omitempty"`
-	Status       string   `json:"status"`       // "todo", "in_progress", "done"
-	Dependencies []string `json:"dependencies"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	Type           string   `json:"type"` // "development", "testing", "design", etc.
+	Priority       string   `json:"priority"`
+	StoryPoints    int      `json:"story_points"`
+	EstimatedHours int      `json:"estimated_hours"`
+	AssignedTo     string   `json:"assigned_to,omitempty"`
+	Status         string   `json:"status"` // "todo", "in_progress", "done"
+	Dependencies   []string `json:"dependencies"`
 }
 
 // TaskDependency represents a dependency between tasks
@@ -217,27 +217,27 @@ type ResourcePlan struct {
 
 // AgentAllocation maps agents to work
 type AgentAllocation struct {
-	AgentType   string   `json:"agent_type"`
-	Allocation  float64  `json:"allocation"`  // percentage
-	Tasks       []string `json:"tasks"`
-	StartDate   string   `json:"start_date"`
-	EndDate     string   `json:"end_date"`
+	AgentType  string   `json:"agent_type"`
+	Allocation float64  `json:"allocation"` // percentage
+	Tasks      []string `json:"tasks"`
+	StartDate  string   `json:"start_date"`
+	EndDate    string   `json:"end_date"`
 }
 
 // ProgressReport represents project progress
 type ProgressReport struct {
-	ProjectName    string          `json:"project_name"`
-	ReportDate     string          `json:"report_date"`
-	ReportPeriod   string          `json:"report_period"`
-	OverallStatus  string          `json:"overall_status"` // "on_track", "at_risk", "delayed", "blocked"
-	HealthScore    int             `json:"health_score"`   // 1-100
-	Completion     ProgressMetrics `json:"completion"`
-	Velocity       VelocityMetrics `json:"velocity"`
-	BurndownData   []BurndownPoint `json:"burndown_data"`
-	Blockers       []Blocker       `json:"blockers"`
-	Highlights     []string        `json:"highlights"`
-	Concerns       []string        `json:"concerns"`
-	NextSteps      []string        `json:"next_steps"`
+	ProjectName   string          `json:"project_name"`
+	ReportDate    string          `json:"report_date"`
+	ReportPeriod  string          `json:"report_period"`
+	OverallStatus string          `json:"overall_status"` // "on_track", "at_risk", "delayed", "blocked"
+	HealthScore   int             `json:"health_score"`   // 1-100
+	Completion    ProgressMetrics `json:"completion"`
+	Velocity      VelocityMetrics `json:"velocity"`
+	BurndownData  []BurndownPoint `json:"burndown_data"`
+	Blockers      []Blocker       `json:"blockers"`
+	Highlights    []string        `json:"highlights"`
+	Concerns      []string        `json:"concerns"`
+	NextSteps     []string        `json:"next_steps"`
 }
 
 // ProgressMetrics tracks completion metrics
@@ -253,11 +253,11 @@ type ProgressMetrics struct {
 
 // VelocityMetrics tracks team velocity
 type VelocityMetrics struct {
-	CurrentSprint    int     `json:"current_sprint"`
-	PlannedVelocity  int     `json:"planned_velocity"`
-	ActualVelocity   int     `json:"actual_velocity"`
-	AverageVelocity  float64 `json:"average_velocity"`
-	Trend            string  `json:"trend"` // "improving", "stable", "declining"
+	CurrentSprint   int     `json:"current_sprint"`
+	PlannedVelocity int     `json:"planned_velocity"`
+	ActualVelocity  int     `json:"actual_velocity"`
+	AverageVelocity float64 `json:"average_velocity"`
+	Trend           string  `json:"trend"` // "improving", "stable", "declining"
 }
 
 // BurndownPoint represents a point on the burndown chart
@@ -279,22 +279,22 @@ type Blocker struct {
 
 // StatusReport is a client-facing status report
 type StatusReport struct {
-	ProjectName     string              `json:"project_name"`
-	ReportDate      string              `json:"report_date"`
-	ExecutiveSummary string             `json:"executive_summary"`
-	OverallHealth   string              `json:"overall_health"` // "green", "yellow", "red"
-	KeyMetrics      map[string]string   `json:"key_metrics"`
-	Accomplishments []string            `json:"accomplishments"`
-	PlannedWork     []string            `json:"planned_work"`
-	Risks           []RiskUpdate        `json:"risks"`
-	Decisions       []Decision          `json:"decisions_needed,omitempty"`
-	Timeline        TimelineUpdate      `json:"timeline"`
+	ProjectName      string            `json:"project_name"`
+	ReportDate       string            `json:"report_date"`
+	ExecutiveSummary string            `json:"executive_summary"`
+	OverallHealth    string            `json:"overall_health"` // "green", "yellow", "red"
+	KeyMetrics       map[string]string `json:"key_metrics"`
+	Accomplishments  []string          `json:"accomplishments"`
+	PlannedWork      []string          `json:"planned_work"`
+	Risks            []RiskUpdate      `json:"risks"`
+	Decisions        []Decision        `json:"decisions_needed,omitempty"`
+	Timeline         TimelineUpdate    `json:"timeline"`
 }
 
 // RiskUpdate represents a risk status update
 type RiskUpdate struct {
 	Risk       string `json:"risk"`
-	Status     string `json:"status"`     // "new", "ongoing", "mitigated", "closed"
+	Status     string `json:"status"` // "new", "ongoing", "mitigated", "closed"
 	Mitigation string `json:"mitigation"`
 }
 
@@ -309,30 +309,30 @@ type Decision struct {
 
 // TimelineUpdate shows schedule status
 type TimelineUpdate struct {
-	OriginalEndDate   string `json:"original_end_date"`
-	CurrentEndDate    string `json:"current_end_date"`
-	Variance          string `json:"variance"`
-	OnSchedule        bool   `json:"on_schedule"`
-	Explanation       string `json:"explanation,omitempty"`
+	OriginalEndDate string `json:"original_end_date"`
+	CurrentEndDate  string `json:"current_end_date"`
+	Variance        string `json:"variance"`
+	OnSchedule      bool   `json:"on_schedule"`
+	Explanation     string `json:"explanation,omitempty"`
 }
 
 // Proposal represents a Statement of Work / Project Proposal
 type Proposal struct {
-	Title           string           `json:"title"`
-	Version         string           `json:"version"`
-	Date            string           `json:"date"`
-	PreparedFor     string           `json:"prepared_for"`
-	PreparedBy      string           `json:"prepared_by"`
-	ExecutiveSummary string          `json:"executive_summary"`
-	Background      string           `json:"background"`
-	Objectives      []string         `json:"objectives"`
-	Scope           ProposalScope    `json:"scope"`
-	Approach        ProposalApproach `json:"approach"`
-	Timeline        ProposalTimeline `json:"timeline"`
-	Team            ProposalTeam     `json:"team"`
-	Investment      ProposalCost     `json:"investment"`
-	Assumptions     []string         `json:"assumptions"`
-	Terms           []string         `json:"terms"`
+	Title            string           `json:"title"`
+	Version          string           `json:"version"`
+	Date             string           `json:"date"`
+	PreparedFor      string           `json:"prepared_for"`
+	PreparedBy       string           `json:"prepared_by"`
+	ExecutiveSummary string           `json:"executive_summary"`
+	Background       string           `json:"background"`
+	Objectives       []string         `json:"objectives"`
+	Scope            ProposalScope    `json:"scope"`
+	Approach         ProposalApproach `json:"approach"`
+	Timeline         ProposalTimeline `json:"timeline"`
+	Team             ProposalTeam     `json:"team"`
+	Investment       ProposalCost     `json:"investment"`
+	Assumptions      []string         `json:"assumptions"`
+	Terms            []string         `json:"terms"`
 }
 
 // ProposalScope defines the scope for a proposal
@@ -353,23 +353,23 @@ type ProposalApproach struct {
 
 // ProposalTimeline shows the schedule
 type ProposalTimeline struct {
-	StartDate   string            `json:"start_date"`
-	EndDate     string            `json:"end_date"`
-	Duration    string            `json:"duration"`
-	Milestones  []ProposalMilestone `json:"milestones"`
+	StartDate  string              `json:"start_date"`
+	EndDate    string              `json:"end_date"`
+	Duration   string              `json:"duration"`
+	Milestones []ProposalMilestone `json:"milestones"`
 }
 
 // ProposalMilestone for the proposal
 type ProposalMilestone struct {
-	Name     string `json:"name"`
-	Date     string `json:"date"`
-	Payment  string `json:"payment,omitempty"`
+	Name    string `json:"name"`
+	Date    string `json:"date"`
+	Payment string `json:"payment,omitempty"`
 }
 
 // ProposalTeam describes the team
 type ProposalTeam struct {
-	Description string       `json:"description"`
-	Roles       []TeamRole   `json:"roles"`
+	Description string     `json:"description"`
+	Roles       []TeamRole `json:"roles"`
 }
 
 // TeamRole describes a role on the team
@@ -381,10 +381,10 @@ type TeamRole struct {
 
 // ProposalCost shows the investment
 type ProposalCost struct {
-	TotalCost      string         `json:"total_cost"`
-	PaymentTerms   string         `json:"payment_terms"`
-	Breakdown      []ProposalLineItem `json:"breakdown"`
-	Notes          []string       `json:"notes,omitempty"`
+	TotalCost    string             `json:"total_cost"`
+	PaymentTerms string             `json:"payment_terms"`
+	Breakdown    []ProposalLineItem `json:"breakdown"`
+	Notes        []string           `json:"notes,omitempty"`
 }
 
 // ProposalLineItem represents a cost component
@@ -438,27 +438,27 @@ type PlanInput struct {
 
 // ProgressInput for TrackProgress
 type ProgressInput struct {
-	ProjectPlan   *ProjectPlan  `json:"project_plan"`
-	TaskUpdates   []TaskUpdate  `json:"task_updates"`
+	ProjectPlan    *ProjectPlan `json:"project_plan"`
+	TaskUpdates    []TaskUpdate `json:"task_updates"`
 	BlockerUpdates []Blocker    `json:"blocker_updates,omitempty"`
-	SprintNumber  int           `json:"sprint_number,omitempty"`
+	SprintNumber   int          `json:"sprint_number,omitempty"`
 }
 
 // TaskUpdate represents an update to a task
 type TaskUpdate struct {
-	TaskID         string `json:"task_id"`
-	Status         string `json:"status"`
-	PercentComplete int   `json:"percent_complete,omitempty"`
-	ActualHours    int    `json:"actual_hours,omitempty"`
-	Notes          string `json:"notes,omitempty"`
+	TaskID          string `json:"task_id"`
+	Status          string `json:"status"`
+	PercentComplete int    `json:"percent_complete,omitempty"`
+	ActualHours     int    `json:"actual_hours,omitempty"`
+	Notes           string `json:"notes,omitempty"`
 }
 
 // StatusReportInput for GenerateStatusReport
 type StatusReportInput struct {
-	Progress     *ProgressReport `json:"progress"`
-	Audience     string          `json:"audience,omitempty"` // "executive", "technical", "client"
-	Period       string          `json:"period,omitempty"`
-	CustomNotes  []string        `json:"custom_notes,omitempty"`
+	Progress    *ProgressReport `json:"progress"`
+	Audience    string          `json:"audience,omitempty"` // "executive", "technical", "client"
+	Period      string          `json:"period,omitempty"`
+	CustomNotes []string        `json:"custom_notes,omitempty"`
 }
 
 // ProposalInput for GenerateProposal
@@ -885,7 +885,7 @@ func (a *EnhancedPMAgent) buildEffortPrompt(req EffortInput) string {
 	}
 
 	if req.Complexity != nil {
-		sb.WriteString(fmt.Sprintf("Complexity Assessment:\n"))
+		sb.WriteString("Complexity Assessment:\n")
 		sb.WriteString(fmt.Sprintf("- Overall: %s (Score: %d/10)\n", req.Complexity.Overall, req.Complexity.Score))
 		sb.WriteString(fmt.Sprintf("- Risk Level: %s\n\n", req.Complexity.RiskLevel))
 	}
@@ -1078,7 +1078,7 @@ func (a *EnhancedPMAgent) buildProgressAnalysisPrompt(req ProgressInput, metrics
 
 	sb.WriteString("Analyze the following project progress:\n\n")
 
-	sb.WriteString(fmt.Sprintf("Progress Metrics:\n"))
+	sb.WriteString("Progress Metrics:\n")
 	sb.WriteString(fmt.Sprintf("- Tasks: %d/%d completed (%.1f%%)\n",
 		metrics.Completion.TasksCompleted, metrics.Completion.TasksTotal, metrics.Completion.PercentComplete))
 	sb.WriteString(fmt.Sprintf("- Story Points: %d/%d completed\n",
@@ -1164,7 +1164,7 @@ Generate a professional status report including:
 func (a *EnhancedPMAgent) buildProposalPrompt(req ProposalInput) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Create a professional project proposal/Statement of Work for:\n\n"))
+	sb.WriteString("Create a professional project proposal/Statement of Work for:\n\n")
 	sb.WriteString(fmt.Sprintf("Client: %s\n", req.ClientName))
 	sb.WriteString(fmt.Sprintf("Project: %s\n\n", req.ProjectName))
 
@@ -1185,7 +1185,7 @@ func (a *EnhancedPMAgent) buildProposalPrompt(req ProposalInput) string {
 	}
 
 	if req.Effort != nil {
-		sb.WriteString(fmt.Sprintf("Effort Estimate:\n"))
+		sb.WriteString("Effort Estimate:\n")
 		sb.WriteString(fmt.Sprintf("- Story Points: %d\n", req.Effort.TotalStoryPoints))
 		sb.WriteString(fmt.Sprintf("- Hours: %d\n", req.Effort.TotalHours))
 		sb.WriteString(fmt.Sprintf("- Days: %d\n\n", req.Effort.TotalDays))

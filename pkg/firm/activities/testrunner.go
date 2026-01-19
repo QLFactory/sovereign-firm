@@ -1,20 +1,21 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/qlfactory/sovereign-firm/pkg/sandbox"
 )
 
-type TestRunner struct{}
+type TestRunner struct {
+	sandboxManager *sandbox.Manager
+}
 
-func NewTestRunner() *TestRunner {
-	return &TestRunner{}
+func NewTestRunner(mgr *sandbox.Manager) *TestRunner {
+	return &TestRunner{sandboxManager: mgr}
 }
 
 type TestRunInput struct {
@@ -22,9 +23,9 @@ type TestRunInput struct {
 }
 
 type TestResult struct {
-	Success   bool   `json:"success"`
-	Output    string `json:"output"`
-	ExitCode  int    `json:"exit_code"`
+	Success     bool     `json:"success"`
+	Output      string   `json:"output"`
+	ExitCode    int      `json:"exit_code"`
 	FailedTests []string `json:"failed_tests,omitempty"`
 }
 
@@ -93,90 +94,116 @@ func (t *TestRunner) RunTests(ctx context.Context, input map[string]interface{})
 		}, nil
 	}
 
-	// Create temporary directory for test execution
-	tmpDir, err := os.MkdirTemp("", "test-runner-*")
+	// Create sandbox configuration
+	config := sandbox.DefaultConfig(sandbox.LevelContainer)
+	config.ID = "test-" + strings.ReplaceAll(time.Now().Format("20060102-150405.000"), ".", "-")
+	config.ProjectID = "test-runner-app"
+	config.Language = "javascript"
+	config.ReadOnlyRoot = false
+	config.NetworkEnabled = true
+	config.MaxMemory = 1024
+
+	// Create and start sandbox
+	sb, err := t.sandboxManager.Create(ctx, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+		return nil, fmt.Errorf("failed to create sandbox: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer t.sandboxManager.Destroy(ctx, config.ID)
 
-	// Write all code files
+	// Prepare files for execution
+	files := make(map[string]string)
 	for filename, content := range req.CodeFiles {
-		// Normalize path - remove leading slash
-		normalizedPath := filename
-		if strings.HasPrefix(normalizedPath, "/") {
-			normalizedPath = normalizedPath[1:]
-		}
+		files[filename] = content
+	}
 
-		filePath := filepath.Join(tmpDir, normalizedPath)
+	// Merge dependencies if package.json exists
+	pkgJSON := make(map[string]interface{})
+	if content, ok := req.CodeFiles["/package.json"]; ok {
+		json.Unmarshal([]byte(content), &pkgJSON)
+	} else if content, ok := req.CodeFiles["package.json"]; ok {
+		json.Unmarshal([]byte(content), &pkgJSON)
+	}
 
-		// Create directory structure
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
+	// Ensure basic structure
+	if pkgJSON["dependencies"] == nil {
+		pkgJSON["dependencies"] = make(map[string]interface{})
+	}
+	if pkgJSON["devDependencies"] == nil {
+		pkgJSON["devDependencies"] = make(map[string]interface{})
+	}
+	if pkgJSON["scripts"] == nil {
+		pkgJSON["scripts"] = make(map[string]interface{})
+	}
 
-		// Write file
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return nil, fmt.Errorf("failed to write file %s: %w", filePath, err)
+	deps := pkgJSON["dependencies"].(map[string]interface{})
+	devDeps := pkgJSON["devDependencies"].(map[string]interface{})
+	scripts := pkgJSON["scripts"].(map[string]interface{})
+
+	// Add test-specific requirements
+	scripts["test"] = "vitest run --reporter=verbose"
+
+	// Merge from DefaultPackageJSON
+	for k, v := range DefaultPackageJSON["dependencies"].(map[string]string) {
+		deps[k] = v
+	}
+	for k, v := range DefaultPackageJSON["devDependencies"].(map[string]string) {
+		devDeps[k] = v
+	}
+
+	// Add common UI and testing libraries that LLMs often use but might forget to list
+	commonUI := map[string]string{
+		"framer-motion":         "11.0.8",
+		"lucide-react":          "0.344.0",
+		"clsx":                  "2.1.0",
+		"tailwind-merge":        "2.2.1",
+		"react-query":           "3.39.3",
+		"@tanstack/react-query": "5.28.4",
+		"supertest":             "6.34.0",
+		"@playwright/test":      "1.42.1",
+	}
+	for k, v := range commonUI {
+		if deps[k] == nil {
+			deps[k] = v
 		}
 	}
 
-	// Always use our known-working package.json (overwrite any LLM-generated one)
-	packageJSONBytes, _ := json.MarshalIndent(DefaultPackageJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), packageJSONBytes, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write package.json: %w", err)
+	finalPkgJSON, _ := json.MarshalIndent(pkgJSON, "", "  ")
+	files["/package.json"] = string(finalPkgJSON)
+	files["/vite.config.js"] = DefaultViteConfig
+	files["/src/setupTests.js"] = DefaultSetupTests
+
+	// Run npm install in sandbox
+	installReq := &sandbox.ExecuteRequest{
+		Command: "npm install --prefer-offline --silent",
+		Files:   files,
 	}
 
-	// Always use our vite.config.js
-	if err := os.WriteFile(filepath.Join(tmpDir, "vite.config.js"), []byte(DefaultViteConfig), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write vite.config.js: %w", err)
-	}
-
-	// Ensure setupTests.js exists
-	srcDir := filepath.Join(tmpDir, "src")
-	os.MkdirAll(srcDir, 0755)
-	setupTestsPath := filepath.Join(srcDir, "setupTests.js")
-	if _, err := os.Stat(setupTestsPath); os.IsNotExist(err) {
-		if err := os.WriteFile(setupTestsPath, []byte(DefaultSetupTests), 0644); err != nil {
-			return nil, fmt.Errorf("failed to write setupTests.js: %w", err)
+	installResult, err := sb.Execute(ctx, installReq)
+	if err != nil || !installResult.Success {
+		output := ""
+		if installResult != nil {
+			output = installResult.Stdout + installResult.Stderr
 		}
-	}
-
-	// Run npm install
-	var installOut bytes.Buffer
-	installCmd := exec.CommandContext(ctx, "npm", "install", "--prefer-offline")
-	installCmd.Dir = tmpDir
-	installCmd.Stdout = &installOut
-	installCmd.Stderr = &installOut
-
-	if err := installCmd.Run(); err != nil {
 		return &TestResult{
 			Success:  false,
-			Output:   fmt.Sprintf("npm install failed:\n%s", installOut.String()),
+			Output:   fmt.Sprintf("npm install failed:\n%s", output),
 			ExitCode: 1,
 		}, nil
 	}
 
-	// Run tests
-	var testOut bytes.Buffer
-	testCmd := exec.CommandContext(ctx, "npm", "test")
-	testCmd.Dir = tmpDir
-	testCmd.Stdout = &testOut
-	testCmd.Stderr = &testOut
-
-	exitCode := 0
-	err = testCmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			return nil, fmt.Errorf("failed to run tests: %w", err)
-		}
+	// Run tests in sandbox
+	testReq := &sandbox.ExecuteRequest{
+		Command: "npm test",
 	}
 
-	output := testOut.String()
-	success := exitCode == 0
+	testResult, err := sb.Execute(ctx, testReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run tests in sandbox: %w", err)
+	}
+
+	output := testResult.Stdout + testResult.Stderr
+	success := testResult.Success
+	exitCode := testResult.ExitCode
 
 	// Extract failed test names from output for feedback
 	failedTests := extractFailedTests(output)

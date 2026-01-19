@@ -47,3 +47,14 @@ frontend/e2e/results/
 # For now, let's include brain for history, but maybe exclude the large Chroma DB files if they were local?
 # The chroma db is in docker volume, not here.
 e2e/complete_journey_results/
+e2e/__pycache__/
+
+# Temporary/generated files
+*.bak
+state*.json
+reg.json
+
+# Keys (never commit)
+jwt_rs256.key
+jwt_rs256.key.pub
+*.pem

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -39,6 +41,7 @@ type RegisterRequest struct {
 	Name        string `json:"name"`
 	TenantName  string `json:"tenant_name"`
 	TenantSlug  string `json:"tenant_slug,omitempty"`
+	InviteToken string `json:"invite_token,omitempty"`
 }
 
 // LoginRequest represents a login request
@@ -106,12 +109,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash password
-	passwordHash, err := HashPassword(req.Password, nil)
-	if err != nil {
-		jsonError(w, "failed to process password", http.StatusInternalServerError)
-		return
-	}
-
 	ctx := r.Context()
 
 	// Start transaction
@@ -134,27 +131,89 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create tenant
-	var tenantID string
-	err = tx.QueryRow(ctx,
-		`INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id`,
-		req.TenantName, req.TenantSlug,
-	).Scan(&tenantID)
-	if err != nil {
-		if strings.Contains(err.Error(), "unique") {
-			jsonError(w, "tenant slug already exists", http.StatusConflict)
+	// Handle invitation if token is present
+	var tenantID, role string
+	role = "owner" // Default for new tenants
+
+	if req.InviteToken != "" {
+		var inviteTenantID, inviteRole string
+		var acceptedAt *time.Time
+		var expiresAt time.Time
+
+		err = tx.QueryRow(ctx,
+			`SELECT tenant_id, role, accepted_at, expires_at FROM invitations WHERE token = $1`,
+			req.InviteToken,
+		).Scan(&inviteTenantID, &inviteRole, &acceptedAt, &expiresAt)
+
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				jsonError(w, "invalid invitation token", http.StatusNotFound)
+				return
+			}
+			jsonError(w, "database error", http.StatusInternalServerError)
 			return
 		}
-		jsonError(w, "failed to create tenant", http.StatusInternalServerError)
+
+		if acceptedAt != nil {
+			jsonError(w, "invitation already accepted", http.StatusGone)
+			return
+		}
+
+		if time.Now().After(expiresAt) {
+			jsonError(w, "invitation expired", http.StatusGone)
+			return
+		}
+
+		tenantID = inviteTenantID
+		role = inviteRole
+
+		// Mark invitation as accepted
+		_, err = tx.Exec(ctx, "UPDATE invitations SET accepted_at = NOW() WHERE token = $1", req.InviteToken)
+		if err != nil {
+			jsonError(w, "failed to update invitation", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Validate tenant name (only required for new tenants)
+		req.TenantName = strings.TrimSpace(req.TenantName)
+		if req.TenantName == "" {
+			jsonError(w, "company name is required", http.StatusBadRequest)
+			return
+		}
+
+		// Generate slug if not provided
+		if req.TenantSlug == "" {
+			req.TenantSlug = slugify(req.TenantName)
+		}
+
+		// Create tenant
+		err = tx.QueryRow(ctx,
+			`INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id`,
+			req.TenantName, req.TenantSlug,
+		).Scan(&tenantID)
+		if err != nil {
+			if strings.Contains(err.Error(), "unique") {
+				jsonError(w, "tenant slug already exists", http.StatusConflict)
+				return
+			}
+			jsonError(w, "failed to create tenant", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Hash password
+	passwordHash, err := HashPassword(req.Password, nil)
+	if err != nil {
+		jsonError(w, "failed to process password", http.StatusInternalServerError)
 		return
 	}
 
-	// Create user as owner
+	// Create user
 	var userID string
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (tenant_id, email, password_hash, name, role)
-		 VALUES ($1, $2, $3, $4, 'owner') RETURNING id`,
-		tenantID, req.Email, passwordHash, req.Name,
+		 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		tenantID, req.Email, passwordHash, req.Name, role,
 	).Scan(&userID)
 	if err != nil {
 		jsonError(w, "failed to create user", http.StatusInternalServerError)
@@ -162,7 +221,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate tokens
-	tokenPair, refreshToken, err := h.jwtManager.GenerateTokenPair(userID, tenantID, req.Email, "owner")
+	tokenPair, refreshToken, err := h.jwtManager.GenerateTokenPair(userID, tenantID, req.Email, role)
 	if err != nil {
 		jsonError(w, "failed to generate tokens", http.StatusInternalServerError)
 		return
@@ -191,7 +250,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 			ID:       userID,
 			Email:    req.Email,
 			Name:     req.Name,
-			Role:     "owner",
+			Role:     role,
 			TenantID: tenantID,
 		},
 		AccessToken:  tokenPair.AccessToken,
@@ -403,6 +462,151 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		Role:     claims.Role,
 		TenantID: claims.TenantID,
 	})
+}
+
+// CreateInvitationRequest represents a request to invite a new user
+type CreateInvitationRequest struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+// UpdateUserRoleRequest represents a request to update a user's role
+type UpdateUserRoleRequest struct {
+	Role string `json:"role"`
+}
+
+// ListUsers returns all users in the current tenant
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	tenantID := GetTenantID(r.Context())
+	if tenantID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	rows, err := h.db.Query(r.Context(),
+		`SELECT id, email, COALESCE(name, ''), role, tenant_id FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`,
+		tenantID,
+	)
+	if err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	users := []UserResponse{}
+	for rows.Next() {
+		var u UserResponse
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.TenantID); err != nil {
+			continue
+		}
+		users = append(users, u)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+// UpdateUserRole updates a user's role
+func (h *Handler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
+	tenantID := GetTenantID(r.Context())
+	targetUserID := chi.URLParam(r, "userId")
+	if tenantID == "" || targetUserID == "" {
+		jsonError(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateUserRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate role
+	validRoles := map[string]bool{"owner": true, "admin": true, "member": true, "viewer": true}
+	if !validRoles[req.Role] {
+		jsonError(w, "invalid role", http.StatusBadRequest)
+		return
+	}
+
+	// Ensure target user is in the same tenant
+	res, err := h.db.Exec(r.Context(),
+		`UPDATE users SET role = $1 WHERE id = $2 AND tenant_id = $3`,
+		req.Role, targetUserID, tenantID,
+	)
+	if err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+
+	if res.RowsAffected() == 0 {
+		jsonError(w, "user not found in tenant", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// InviteUser creates a new invitation for a user
+func (h *Handler) InviteUser(w http.ResponseWriter, r *http.Request) {
+	tenantID := GetTenantID(r.Context())
+	inviterID := GetUserID(r.Context())
+	if tenantID == "" || inviterID == "" {
+		jsonError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req CreateInvitationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate email
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if !emailRegex.MatchString(req.Email) {
+		jsonError(w, "invalid email format", http.StatusBadRequest)
+		return
+	}
+
+	// Validate role
+	validRoles := map[string]bool{"admin": true, "member": true, "viewer": true}
+	if !validRoles[req.Role] {
+		jsonError(w, "invalid role", http.StatusBadRequest)
+		return
+	}
+
+	// Generate invitation token
+	token := hex.EncodeToString(generateRandomBytes(32))
+
+	ctx := r.Context()
+	_, err := h.db.Exec(ctx,
+		`INSERT INTO invitations (tenant_id, email, role, token, invited_by, expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenantID, req.Email, req.Role, token, inviterID, time.Now().Add(24*7*time.Hour),
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") {
+			jsonError(w, "invitation already exists for this email in this tenant", http.StatusConflict)
+			return
+		}
+		jsonError(w, "failed to create invitation", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{
+		"email":  req.Email,
+		"status": "invited",
+		"token":  token, // In a real app, this would be in the URL of the email
+	})
+}
+
+// generateRandomBytes returns n random bytes
+func generateRandomBytes(n int) []byte {
+	b := make([]byte, n)
+	rand.Read(b)
+	return b
 }
 
 // helper functions

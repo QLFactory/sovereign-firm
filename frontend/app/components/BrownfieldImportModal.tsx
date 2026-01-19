@@ -16,6 +16,9 @@ interface ImportProgress {
   files: number;
   chunks: number;
   symbols: number;
+  primaryLang?: string;
+  detectedStack?: string[];
+  phase?: string;
 }
 
 export default function BrownfieldImportModal({
@@ -83,6 +86,9 @@ export default function BrownfieldImportModal({
           files: statusData.files_indexed || 0,
           chunks: statusData.chunks_created || 0,
           symbols: statusData.symbols_found || 0,
+          primaryLang: statusData.primary_lang,
+          detectedStack: statusData.detected_stack,
+          phase: statusData.phase,
         });
 
         if (statusData.status === "complete") {
@@ -193,11 +199,10 @@ export default function BrownfieldImportModal({
             <div className="flex gap-3 mb-6">
               <button
                 onClick={() => setSource("git")}
-                className={`flex-1 p-4 rounded-xl border transition-all ${
-                  source === "git"
+                className={`flex-1 p-4 rounded-xl border transition-all ${source === "git"
                     ? "border-[var(--cyan-glow)] bg-[rgba(0,240,255,0.1)]"
                     : "border-[var(--steel)] hover:border-[var(--silver)]"
-                }`}
+                  }`}
               >
                 <svg
                   className="w-6 h-6 mx-auto mb-2 text-[var(--cyan-glow)]"
@@ -219,11 +224,10 @@ export default function BrownfieldImportModal({
 
               <button
                 onClick={() => setSource("local")}
-                className={`flex-1 p-4 rounded-xl border transition-all ${
-                  source === "local"
+                className={`flex-1 p-4 rounded-xl border transition-all ${source === "local"
                     ? "border-[var(--cyan-glow)] bg-[rgba(0,240,255,0.1)]"
                     : "border-[var(--steel)] hover:border-[var(--silver)]"
-                }`}
+                  }`}
               >
                 <svg
                   className="w-6 h-6 mx-auto mb-2 text-[var(--cyan-glow)]"
@@ -277,11 +281,10 @@ export default function BrownfieldImportModal({
                     value={repoUrl}
                     onChange={(e) => setRepoUrl(e.target.value)}
                     placeholder="https://github.com/org/repo.git"
-                    className={`input ${
-                      repoUrl && !isValidGitUrl(repoUrl)
+                    className={`input ${repoUrl && !isValidGitUrl(repoUrl)
                         ? "border-[var(--rose-glow)]"
                         : ""
-                    }`}
+                      }`}
                     name="repo_url"
                   />
                   {repoUrl && !isValidGitUrl(repoUrl) && (
@@ -329,44 +332,57 @@ export default function BrownfieldImportModal({
         )}
 
         {/* Analyzing State */}
-        {status === "analyzing" && (
-          <div className="text-center py-8">
-            <div className="w-12 h-12 mx-auto mb-4 spinner" />
-            <h3 className="text-lg font-semibold text-[var(--ivory)] mb-2">
-              Analyzing Codebase
-            </h3>
-            <p className="text-body-sm text-[var(--silver)] mb-6">
-              Parsing files, extracting patterns, and building knowledge graph...
-            </p>
+        <div className="text-center py-8">
+          <div className="w-12 h-12 mx-auto mb-4 spinner" />
+          <h3 className="text-lg font-semibold text-[var(--ivory)] mb-2">
+            {progress.phase === "ANALYZING" ? "Deep Semantic Analysis" : "Analyzing Codebase"}
+          </h3>
+          <p className="text-body-sm text-[var(--silver)] mb-4">
+            {progress.phase === "INDEXING"
+              ? "Building high-fidelity RAG knowledge graph..."
+              : "Parsing symbols and mapping project structure..."}
+          </p>
 
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 glass rounded-xl">
-                <div className="text-2xl font-bold text-[var(--cyan-glow)]">
-                  {progress.files}
-                </div>
-                <div className="text-caption text-[var(--silver)]">
-                  Files Indexed
-                </div>
+          {progress.primaryLang && (
+            <div className="mb-6 flex flex-wrap justify-center gap-2">
+              <span className="px-3 py-1 bg-[rgba(0,240,255,0.1)] border border-[var(--cyan-glow)] rounded-full text-xs text-[var(--cyan-glow)]">
+                {progress.primaryLang}
+              </span>
+              {progress.detectedStack?.slice(0, 3).map((tech, i) => (
+                <span key={i} className="px-3 py-1 bg-[rgba(139,92,246,0.1)] border border-[var(--violet-glow)] rounded-full text-xs text-[var(--violet-glow)]">
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-3 glass rounded-xl">
+              <div className="text-2xl font-bold text-[var(--cyan-glow)]">
+                {progress.files}
               </div>
-              <div className="p-3 glass rounded-xl">
-                <div className="text-2xl font-bold text-[var(--violet-glow)]">
-                  {progress.chunks}
-                </div>
-                <div className="text-caption text-[var(--silver)]">
-                  Code Chunks
-                </div>
+              <div className="text-caption text-[var(--silver)]">
+                Files
               </div>
-              <div className="p-3 glass rounded-xl">
-                <div className="text-2xl font-bold text-[var(--emerald-glow)]">
-                  {progress.symbols}
-                </div>
-                <div className="text-caption text-[var(--silver)]">
-                  Symbols Found
-                </div>
+            </div>
+            <div className="p-3 glass rounded-xl">
+              <div className="text-2xl font-bold text-[var(--violet-glow)]">
+                {progress.chunks}
+              </div>
+              <div className="text-caption text-[var(--silver)]">
+                Chunks
+              </div>
+            </div>
+            <div className="p-3 glass rounded-xl">
+              <div className="text-2xl font-bold text-[var(--emerald-glow)]">
+                {progress.symbols}
+              </div>
+              <div className="text-caption text-[var(--silver)]">
+                Symbols
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Success State */}
         {status === "success" && (

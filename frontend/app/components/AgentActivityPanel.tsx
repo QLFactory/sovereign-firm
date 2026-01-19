@@ -8,13 +8,12 @@ interface AgentActivityPanelProps {
   onAgentClick?: (agent: ActiveAgent) => void;
 }
 
-// Agent role colors
-const agentColors: Record<string, { bg: string; border: string; text: string }> = {
-  architect: { bg: "bg-purple-900/50", border: "border-purple-500", text: "text-purple-300" },
-  developer: { bg: "bg-blue-900/50", border: "border-blue-500", text: "text-blue-300" },
-  devops: { bg: "bg-orange-900/50", border: "border-orange-500", text: "text-orange-300" },
-  qa: { bg: "bg-green-900/50", border: "border-green-500", text: "text-green-300" },
-  default: { bg: "bg-zinc-800", border: "border-zinc-600", text: "text-zinc-300" },
+const agentColors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
+  architect: { bg: "bg-[var(--violet-glow)]/10", border: "border-[var(--violet-glow)]/30", text: "text-[var(--violet-glow)]", glow: "shadow-glow-violet/20" },
+  developer: { bg: "bg-[var(--cyan-glow)]/10", border: "border-[var(--cyan-glow)]/30", text: "text-[var(--cyan-glow)]", glow: "shadow-glow-cyan/20" },
+  devops: { bg: "bg-[var(--amber-glow)]/10", border: "border-[var(--amber-glow)]/30", text: "text-[var(--amber-glow)]", glow: "shadow-glow-amber/20" },
+  qa: { bg: "bg-[var(--emerald-glow)]/10", border: "border-[var(--emerald-glow)]/30", text: "text-[var(--emerald-glow)]", glow: "shadow-glow-emerald/20" },
+  default: { bg: "bg-[var(--glass-highlight)]", border: "border-[var(--glass-border)]", text: "text-[var(--silver)]", glow: "" },
 };
 
 // Agent role icons
@@ -56,6 +55,7 @@ function getAgentRole(agentName: string): string {
 export default function AgentActivityPanel({ activeAgents, onAgentClick }: AgentActivityPanelProps) {
   // Sort agents by start time (newest first)
   const sortedAgents = useMemo(() => {
+    if (!activeAgents) return [];
     return [...activeAgents].sort((a, b) => {
       return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
     });
@@ -76,10 +76,10 @@ export default function AgentActivityPanel({ activeAgents, onAgentClick }: Agent
 
   if (activeAgents.length === 0) {
     return (
-      <div className="p-4 text-center text-zinc-500">
-        <div className="text-4xl mb-2">🤖</div>
-        <p className="text-sm">No active agents</p>
-        <p className="text-xs mt-1">Agents will appear here when tasks start</p>
+      <div className="p-8 text-center glass rounded-2xl border-[var(--glass-border)] mx-4 my-8">
+        <div className="text-5xl mb-4 opacity-40 animate-pulse">🤖</div>
+        <p className="text-[var(--ivory)] font-bold text-sm tracking-tight">System Idle</p>
+        <p className="text-[var(--silver)] text-xs mt-2 opacity-60">Awaiting agent orchestration events...</p>
       </div>
     );
   }
@@ -87,25 +87,25 @@ export default function AgentActivityPanel({ activeAgents, onAgentClick }: Agent
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-3 border-b border-zinc-800">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold text-sm">Active Agents</h3>
-          <span className="text-xs px-2 py-1 bg-green-900/50 text-green-300 rounded-full">
-            {activeAgents.length} running
+      <div className="p-4 border-b border-[var(--glass-border)] bg-[var(--carbon)]/30">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-bold text-[11px] uppercase tracking-widest text-[var(--silver)]">Active Agents</h3>
+          <span className="text-[10px] font-bold px-2 py-0.5 bg-[var(--emerald-glow)]/20 text-[var(--emerald-glow)] rounded-full border border-[var(--emerald-glow)]/30 shadow-glow-emerald/10">
+            {activeAgents.length} LIVE
           </span>
         </div>
 
         {/* Role Summary */}
-        <div className="flex gap-2 mt-2 flex-wrap">
+        <div className="flex gap-1.5 mt-2 flex-wrap">
           {Object.entries(agentsByRole).map(([role, agents]) => {
             const colors = agentColors[role] || agentColors.default;
             const icon = agentIcons[role] || agentIcons.default;
             return (
               <span
                 key={role}
-                className={`text-xs px-2 py-0.5 rounded-full ${colors.bg} ${colors.text}`}
+                className={`text-[9px] font-bold uppercase tracking-tighter px-2 py-0.5 rounded-full glass border ${colors.border} ${colors.text} flex items-center gap-1`}
               >
-                {icon} {agents.length}
+                <span>{icon}</span> {agents.length} {role}
               </span>
             );
           })}
@@ -113,7 +113,7 @@ export default function AgentActivityPanel({ activeAgents, onAgentClick }: Agent
       </div>
 
       {/* Agent List */}
-      <div className="flex-1 overflow-auto p-3 space-y-2">
+      <div className="flex-1 overflow-auto p-4 space-y-3">
         {sortedAgents.map((agent) => {
           const role = getAgentRole(agent.agent_name);
           const colors = agentColors[role] || agentColors.default;
@@ -124,40 +124,47 @@ export default function AgentActivityPanel({ activeAgents, onAgentClick }: Agent
               key={`${agent.agent_id}-${agent.task_id}`}
               onClick={() => onAgentClick?.(agent)}
               className={`
-                w-full p-3 rounded-lg border transition-all text-left
-                ${colors.bg} ${colors.border}
-                hover:scale-[1.02] hover:shadow-lg
+                w-full p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group
+                ${colors.bg} ${colors.border} ${colors.glow}
+                hover:border-[var(--ivory)]/40 hover:-translate-y-1
               `}
             >
-              <div className="flex items-start gap-3">
+              <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
+                <span className="text-4xl">{icon}</span>
+              </div>
+
+              <div className="flex items-start gap-4 h-full">
                 {/* Agent Icon */}
-                <div className="text-2xl flex-shrink-0">{icon}</div>
+                <div className="w-10 h-10 rounded-full glass flex items-center justify-center text-xl shadow-inner border border-[var(--ivory)]/10">
+                  {icon}
+                </div>
 
                 {/* Agent Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`font-medium text-sm truncate ${colors.text}`}>
+                    <span className={`font-bold text-xs uppercase tracking-wide tracking-tight truncate ${colors.text}`}>
                       {agent.agent_name}
                     </span>
-                    <span className="text-xs text-zinc-500 flex-shrink-0">
+                    <span className="text-[10px] font-mono text-[var(--silver)] flex-shrink-0 opacity-60">
                       {formatDuration(agent.started_at)}
                     </span>
                   </div>
 
                   {/* Task Info */}
-                  <div className="text-xs text-zinc-400 mt-1 truncate">
-                    📋 {agent.task_name}
+                  <div className="text-[11px] text-[var(--pearl)] mt-1.5 font-medium flex items-center gap-1.5">
+                    <span className="opacity-40 text-[9px]">EXEC:</span>
+                    <span className="truncate">{agent.task_name}</span>
                   </div>
 
                   {/* Agent ID */}
-                  <div className="text-xs text-zinc-600 mt-1 font-mono truncate">
-                    ID: {agent.agent_id.slice(0, 8)}...
+                  <div className="text-[9px] text-[var(--silver)] mt-1.5 font-mono opacity-30 truncate uppercase tracking-widest">
+                    NODE_{agent.agent_id.slice(0, 8)}
                   </div>
                 </div>
 
                 {/* Activity Indicator */}
-                <div className="flex-shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="flex-shrink-0 pt-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${colors.text.replace('text-', 'bg-')} animate-pulse shadow-[0_0_8px_currentColor]`} />
                 </div>
               </div>
             </button>
@@ -166,19 +173,19 @@ export default function AgentActivityPanel({ activeAgents, onAgentClick }: Agent
       </div>
 
       {/* Footer Stats */}
-      <div className="p-3 border-t border-zinc-800">
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
-          <div>
-            <div className="text-zinc-500">Total</div>
-            <div className="font-medium text-zinc-300">{activeAgents.length}</div>
+      <div className="p-4 border-t border-[var(--glass-border)] bg-[var(--carbon)]/20">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--silver)] opacity-50">Total</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">{activeAgents.length}</div>
           </div>
-          <div>
-            <div className="text-zinc-500">Roles</div>
-            <div className="font-medium text-zinc-300">{Object.keys(agentsByRole).length}</div>
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--silver)] opacity-50">Roles</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">{Object.keys(agentsByRole).length}</div>
           </div>
-          <div>
-            <div className="text-zinc-500">Tasks</div>
-            <div className="font-medium text-zinc-300">
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--silver)] opacity-50">Tasks</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">
               {new Set(activeAgents.map(a => a.task_id)).size}
             </div>
           </div>

@@ -38,7 +38,7 @@ let result = 0;
 		t.Fatalf("Parse failed: %v", err)
 	}
 
-	structure, err := ExtractSymbols(result)
+	structure, err := ExtractSymbols(p, result)
 	if err != nil {
 		t.Fatalf("ExtractSymbols failed: %v", err)
 	}
@@ -119,7 +119,7 @@ var DefaultName = "Anonymous"
 		t.Fatalf("Parse failed: %v", err)
 	}
 
-	structure, err := ExtractSymbols(result)
+	structure, err := ExtractSymbols(p, result)
 	if err != nil {
 		t.Fatalf("ExtractSymbols failed: %v", err)
 	}
@@ -233,7 +233,7 @@ def _private_helper():
 		t.Fatalf("Parse failed: %v", err)
 	}
 
-	structure, err := ExtractSymbols(result)
+	structure, err := ExtractSymbols(p, result)
 	if err != nil {
 		t.Fatalf("ExtractSymbols failed: %v", err)
 	}
@@ -321,7 +321,7 @@ export class UserService {
 		t.Fatalf("Parse failed: %v", err)
 	}
 
-	structure, err := ExtractSymbols(result)
+	structure, err := ExtractSymbols(p, result)
 	if err != nil {
 		t.Fatalf("ExtractSymbols failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestCodeStructureJSON(t *testing.T) {
 		t.Fatalf("Parse failed: %v", err)
 	}
 
-	structure, err := ExtractSymbols(result)
+	structure, err := ExtractSymbols(p, result)
 	if err != nil {
 		t.Fatalf("ExtractSymbols failed: %v", err)
 	}
@@ -383,5 +383,222 @@ func TestCodeStructureJSON(t *testing.T) {
 
 	if structure.Language != LangJavaScript {
 		t.Errorf("Language = %q, want %q", structure.Language, LangJavaScript)
+	}
+}
+
+func TestExtractRustSymbols(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
+
+	source := []byte(`
+mod utils {
+    pub fn helper() {}
+}
+
+pub struct User {
+    pub name: String,
+}
+
+pub trait Greeter {
+    fn greet(&self);
+}
+
+pub enum Status {
+    Active,
+    Inactive,
+}
+
+pub fn main() {
+    println!("Hello");
+}
+`)
+
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "main.rs", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if result.Language != LangRust {
+		t.Fatalf("Detected language is %s, expected %s", result.Language, LangRust)
+	}
+
+	structure, err := ExtractSymbols(p, result)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+
+	// Check Mod/Export
+	if len(structure.Exports) < 1 {
+		t.Errorf("Expected mod to be captured as export, got 0")
+	}
+
+	// Check Functions
+	hasMain := false
+	for _, fn := range structure.Functions {
+		if fn.Name == "main" {
+			hasMain = true
+		}
+	}
+	if !hasMain {
+		t.Error("Expected to find main function")
+	}
+
+	// Check Types (Struct, Enum, Trait)
+	hasUser := false
+	hasStatus := false
+	hasGreeter := false
+	for _, typ := range structure.Types {
+		switch typ.Name {
+		case "User":
+			hasUser = true
+		case "Status":
+			hasStatus = true
+		case "Greeter":
+			hasGreeter = true
+		}
+	}
+	if !hasUser {
+		t.Error("Expected to find User struct")
+	}
+	if !hasStatus {
+		t.Error("Expected to find Status enum")
+	}
+	if !hasGreeter {
+		t.Error("Expected to find Greeter trait")
+	}
+}
+
+func TestExtractPHPSymbols(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
+
+	source := []byte(`<?php
+namespace App;
+
+interface Logger {
+    public function log($msg);
+}
+
+trait Timer {
+    public function start() {}
+}
+
+class User implements Logger {
+    use Timer;
+    public function log($msg) { echo $msg; }
+}
+
+function global_helper() {}
+?>`)
+
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "app.php", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	structure, err := ExtractSymbols(p, result)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+
+	// Check Class
+	hasUser := false
+	for _, cls := range structure.Classes {
+		if cls.Name == "User" {
+			hasUser = true
+		}
+	}
+	if !hasUser {
+		t.Error("Expected to find User class")
+	}
+
+	// Check Types (Interface, Trait)
+	hasLogger := false
+	hasTimer := false
+	for _, typ := range structure.Types {
+		switch typ.Name {
+		case "Logger":
+			hasLogger = true
+		case "Timer":
+			hasTimer = true
+		}
+	}
+	if !hasLogger {
+		t.Error("Expected to find Logger interface")
+	}
+	if !hasTimer {
+		t.Error("Expected to find Timer trait")
+	}
+
+	// Check Functions
+	hasHelper := false
+	for _, fn := range structure.Functions {
+		if fn.Name == "global_helper" {
+			hasHelper = true
+		}
+	}
+	if !hasHelper {
+		t.Error("Expected to find global_helper function")
+	}
+}
+
+func TestExtractCPPSymbols(t *testing.T) {
+	p := NewParser()
+	defer p.Close()
+
+	source := []byte(`
+namespace core {
+    class Manager {
+    public:
+        void start() {}
+    };
+
+    struct Config {
+        int id;
+    };
+}
+
+void global_init() {}
+`)
+
+	ctx := context.Background()
+	result, err := p.Parse(ctx, "main.cpp", source)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	structure, err := ExtractSymbols(p, result)
+	if err != nil {
+		t.Fatalf("ExtractSymbols failed: %v", err)
+	}
+
+	// Check Classes/Structs
+	hasManager := false
+	hasConfig := false
+	for _, cls := range structure.Classes {
+		switch cls.Name {
+		case "Manager":
+			hasManager = true
+		case "Config":
+			hasConfig = true
+		}
+	}
+	if !hasManager {
+		t.Error("Expected to find Manager class")
+	}
+	if !hasConfig {
+		t.Error("Expected to find Config struct")
+	}
+
+	// Check Functions
+	hasInit := false
+	for _, fn := range structure.Functions {
+		if fn.Name == "global_init" {
+			hasInit = true
+		}
+	}
+	if !hasInit {
+		t.Error("Expected to find global_init function")
 	}
 }

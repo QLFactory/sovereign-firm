@@ -112,14 +112,14 @@ func main() {
 			// Projects
 			r.Route("/projects", func(r chi.Router) {
 				r.Get("/", apiHandler.ListProjects)
-				r.Post("/", apiHandler.CreateProject)
+				r.With(authMiddleware.RequireMinRole("member")).Post("/", apiHandler.CreateProject)
 
 				// Brownfield import
 				r.Post("/import", apiHandler.ImportBrownfield)
 
 				r.Route("/{projectId}", func(r chi.Router) {
 					r.Get("/", apiHandler.GetProject)
-					r.Delete("/", apiHandler.ArchiveProject)
+					r.With(authMiddleware.RequireMinRole("admin")).Delete("/", apiHandler.ArchiveProject)
 					r.Get("/state", apiHandler.GetProjectState)
 					r.Post("/message", apiHandler.SendMessage)
 
@@ -130,6 +130,14 @@ func main() {
 					r.Get("/artifacts", apiHandler.ListArtifacts)
 					r.Get("/artifacts/{artifactId}", apiHandler.GetArtifact)
 				})
+			})
+
+			// User Management (Admin only)
+			r.Route("/users", func(r chi.Router) {
+				r.Use(authMiddleware.RequireMinRole("admin"))
+				r.Get("/", authHandler.ListUsers)
+				r.Post("/invite", authHandler.InviteUser)
+				r.Put("/{userId}/role", authHandler.UpdateUserRole)
 			})
 		})
 

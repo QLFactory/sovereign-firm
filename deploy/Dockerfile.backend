@@ -25,11 +25,12 @@ FROM alpine:latest
 WORKDIR /app
 
 # Install Node.js for TestRunner activity (runs Vitest tests)
-RUN apk --no-cache add ca-certificates nodejs npm bash
+RUN apk --no-cache add ca-certificates nodejs npm bash docker-cli
 
-# Copy Binaries
+# Copy Binaries and Assets
 COPY --from=builder /bin/orchestrator /app/orchestrator
 COPY --from=builder /bin/worker /app/worker
+COPY --from=builder /app/skills /app/skills
 
 # Create entrypoint script to run both worker and orchestrator
 RUN echo '#!/bin/bash' > /app/entrypoint.sh && \

@@ -31,6 +31,7 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
   // Create stage map for easy lookup
   const stageMap = useMemo(() => {
     const map = new Map<string, CIStageResult>();
+    if (!stages) return map;
     for (const stage of stages) {
       map.set(stage.stage, stage);
     }
@@ -48,12 +49,12 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
   }, [stages, currentStage]);
 
   // Status colors
-  const statusColors: Record<string, { bg: string; text: string; border: string }> = {
-    idle: { bg: "bg-zinc-800", text: "text-zinc-400", border: "border-zinc-600" },
-    running: { bg: "bg-yellow-900/50", text: "text-yellow-300", border: "border-yellow-500" },
-    passed: { bg: "bg-green-900/50", text: "text-green-300", border: "border-green-500" },
-    failed: { bg: "bg-red-900/50", text: "text-red-300", border: "border-red-500" },
-    partial: { bg: "bg-blue-900/50", text: "text-blue-300", border: "border-blue-500" },
+  const statusColors: Record<string, { bg: string; text: string; border: string; glow: string }> = {
+    idle: { bg: "bg-[var(--glass-highlight)]", text: "text-[var(--silver)]", border: "border-[var(--glass-border)]", glow: "" },
+    running: { bg: "bg-[var(--amber-glow)]/10", text: "text-[var(--amber-glow)]", border: "border-[var(--amber-glow)]/30", glow: "shadow-glow-amber/20" },
+    passed: { bg: "bg-[var(--emerald-glow)]/10", text: "text-[var(--emerald-glow)]", border: "border-[var(--emerald-glow)]/30", glow: "shadow-glow-emerald/20" },
+    failed: { bg: "bg-[var(--rose-glow)]/10", text: "text-[var(--rose-glow)]", border: "border-[var(--rose-glow)]/30", glow: "shadow-glow-rose/20" },
+    partial: { bg: "bg-[var(--cyan-glow)]/10", text: "text-[var(--cyan-glow)]", border: "border-[var(--cyan-glow)]/30", glow: "shadow-glow-cyan/20" },
   };
 
   const totalDuration = stages.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
@@ -61,23 +62,23 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-3 border-b border-zinc-800">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold text-sm">CI Pipeline</h3>
+      <div className="p-4 border-b border-[var(--glass-border)] bg-[var(--carbon)]/30 backdrop-blur-sm">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-bold text-[11px] uppercase tracking-widest text-[var(--silver)]">Engine Integrity</h3>
           <span
-            className={`text-xs px-2 py-1 rounded-full ${statusColors[overallStatus].bg} ${statusColors[overallStatus].text}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border glass ${statusColors[overallStatus].bg} ${statusColors[overallStatus].text} ${statusColors[overallStatus].border} ${statusColors[overallStatus].glow}`}
           >
-            {overallStatus === "idle" && "Idle"}
-            {overallStatus === "running" && "Running..."}
-            {overallStatus === "passed" && "✓ Passed"}
-            {overallStatus === "failed" && "✗ Failed"}
-            {overallStatus === "partial" && "In Progress"}
+            {overallStatus === "idle" && "STANDBY"}
+            {overallStatus === "running" && "SYNCHRONIZING..."}
+            {overallStatus === "passed" && "INTEGRITY SECURED"}
+            {overallStatus === "failed" && "BREACH DETECTED"}
+            {overallStatus === "partial" && "PROCESSING"}
           </span>
         </div>
 
         {totalDuration > 0 && (
-          <div className="text-xs text-zinc-500 mt-1">
-            Total: {formatDuration(totalDuration)}
+          <div className="text-[10px] font-mono text-[var(--silver)] opacity-40">
+            METRICS: {formatDuration(totalDuration)} TOTAL EXECUTION
           </div>
         )}
       </div>
@@ -99,10 +100,10 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
             }
 
             const colors = {
-              pending: { bg: "bg-zinc-800", text: "text-zinc-500", icon: "○" },
-              running: { bg: "bg-yellow-900/50", text: "text-yellow-300", icon: "◉" },
-              passed: { bg: "bg-green-900/50", text: "text-green-300", icon: "✓" },
-              failed: { bg: "bg-red-900/50", text: "text-red-300", icon: "✗" },
+              pending: { bg: "bg-transparent", text: "text-[var(--silver)]/40", icon: "○", border: "border-[var(--glass-border)]", glow: "" },
+              running: { bg: "bg-[var(--amber-glow)]/10", text: "text-[var(--amber-glow)]", icon: "◉", border: "border-[var(--amber-glow)]/30", glow: "shadow-glow-amber/20" },
+              passed: { bg: "bg-[var(--emerald-glow)]/10", text: "text-[var(--emerald-glow)]", icon: "✓", border: "border-[var(--emerald-glow)]/30", glow: "shadow-glow-emerald/20" },
+              failed: { bg: "bg-[var(--rose-glow)]/10", text: "text-[var(--rose-glow)]", icon: "✗", border: "border-[var(--rose-glow)]/30", glow: "shadow-glow-rose/20" },
             };
 
             const c = colors[status];
@@ -113,9 +114,8 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
                 {idx > 0 && (
                   <div className="flex justify-center -mt-1 mb-1">
                     <div
-                      className={`w-px h-3 ${
-                        status === "pending" ? "bg-zinc-700" : "bg-zinc-600"
-                      }`}
+                      className={`w-px h-3 ${status === "pending" ? "bg-zinc-700" : "bg-zinc-600"
+                        }`}
                     />
                   </div>
                 )}
@@ -125,30 +125,32 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
                   onClick={() => result && onStageClick?.(result)}
                   disabled={!result}
                   className={`
-                    w-full p-3 rounded-lg border transition-all text-left
-                    ${c.bg} ${status === "pending" ? "border-zinc-700" : "border-zinc-600"}
-                    ${result ? "hover:scale-[1.02] hover:shadow-lg cursor-pointer" : "cursor-default"}
+                    w-full p-4 rounded-xl border transition-all duration-300 text-left relative overflow-hidden group glass
+                    ${c.bg} ${c.border} ${c.glow}
+                    ${result ? "hover:border-[var(--ivory)]/40 hover:-translate-y-0.5 cursor-pointer" : "cursor-default opacity-50"}
                     ${isCurrentStage ? "animate-pulse" : ""}
                   `}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     {/* Stage Icon */}
-                    <div className="text-xl">{config.icon}</div>
+                    <div className="w-10 h-10 rounded-full glass flex items-center justify-center text-xl border border-[var(--ivory)]/10">
+                      {config.icon}
+                    </div>
 
                     {/* Stage Info */}
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium text-sm ${c.text}`}>
+                        <span className={`font-bold text-xs uppercase tracking-widest ${c.text}`}>
                           {config.label}
                         </span>
-                        <span className={`text-sm ${c.text}`}>{c.icon}</span>
+                        <span className={`text-xs font-bold ${c.text}`}>{c.icon}</span>
                       </div>
-                      <div className="text-xs text-zinc-500">{config.description}</div>
+                      <div className="text-[10px] text-[var(--silver)] opacity-60 mt-0.5">{config.description}</div>
                     </div>
 
                     {/* Duration */}
                     {result?.duration_ms && (
-                      <div className="text-xs text-zinc-500">
+                      <div className="text-[10px] font-mono text-[var(--silver)] opacity-40">
                         {formatDuration(result.duration_ms)}
                       </div>
                     )}
@@ -156,14 +158,14 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
 
                   {/* Error Message */}
                   {result?.error && (
-                    <div className="mt-2 p-2 bg-red-950/50 rounded text-xs text-red-400 truncate">
-                      ⚠️ {result.error}
+                    <div className="mt-3 p-3 bg-[var(--rose-glow)]/10 rounded-lg text-[10px] font-medium text-[var(--rose-glow)] border border-[var(--rose-glow)]/20 animate-fade-in">
+                      <span className="font-bold mr-1">BREACH:</span> {result.error}
                     </div>
                   )}
 
                   {/* Output Preview */}
                   {result?.output && status === "failed" && (
-                    <div className="mt-2 p-2 bg-zinc-950/50 rounded text-xs text-zinc-400 font-mono truncate">
+                    <div className="mt-2 p-3 bg-[var(--void)]/50 rounded-lg text-[10px] text-[var(--silver)]/60 font-mono border border-[var(--glass-border)] truncate">
                       {result.output.slice(0, 100)}...
                     </div>
                   )}
@@ -175,23 +177,23 @@ export default function CIStatusPanel({ stages, currentStage, onStageClick }: CI
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-zinc-800">
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
-          <div>
-            <div className="text-zinc-500">Passed</div>
-            <div className="font-medium text-green-400">
+      <div className="p-4 border-t border-[var(--glass-border)] bg-[var(--carbon)]/20">
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--emerald-glow)] opacity-60">Passed</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">
               {stages.filter((s) => s.success).length}
             </div>
           </div>
-          <div>
-            <div className="text-zinc-500">Failed</div>
-            <div className="font-medium text-red-400">
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--rose-glow)] opacity-60">Failed</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">
               {stages.filter((s) => !s.success).length}
             </div>
           </div>
-          <div>
-            <div className="text-zinc-500">Pending</div>
-            <div className="font-medium text-zinc-400">
+          <div className="glass p-2 rounded-lg border border-[var(--glass-border)]">
+            <div className="text-[9px] uppercase font-bold tracking-widest text-[var(--silver)] opacity-40">Pending</div>
+            <div className="text-xs font-bold text-[var(--ivory)]">
               {stageOrder.length - stages.length}
             </div>
           </div>

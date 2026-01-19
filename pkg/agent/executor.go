@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/qlfactory/sovereign-firm/pkg/mcp"
@@ -66,6 +67,9 @@ func (e *AgentExecutor) ExecuteTask(ctx context.Context, task *Task) (*TaskResul
 		if toolCall := e.extractToolCall(resp.Response); toolCall != nil {
 			toolCallCount++
 
+			// Check for new messages before executing tool
+			e.checkForNewMessages(&conversationHistory)
+
 			// Execute the tool
 			toolResp := e.toolRegistry.Execute(ctx, toolCall)
 
@@ -106,6 +110,22 @@ func (e *AgentExecutor) ExecuteTask(ctx context.Context, task *Task) (*TaskResul
 	return finalResult, nil
 }
 
+// WaitForReply waits for a reply to a message sent to another agent
+func (e *AgentExecutor) WaitForReply(ctx context.Context, replyToID string) (*Message, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case msg := <-e.agent.Inbox:
+			if msg.ReplyTo == replyToID {
+				return &msg, nil
+			}
+			// Re-inject other messages into handleMessage
+			e.agent.handleMessage(msg)
+		}
+	}
+}
+
 // TaskResult holds the outcome of task execution
 type TaskResult struct {
 	Success   bool        `json:"success"`
@@ -142,6 +162,18 @@ func (e *AgentExecutor) buildTaskPrompt(task *Task) string {
 		}
 	}
 
+	// Add pending inter-agent messages
+	e.agent.mu.RLock()
+	if len(e.agent.PendingMessages) > 0 {
+		prompt += "## Pending Inter-Agent Requests\n"
+		prompt += "The following agents have requested information or action from you:\n\n"
+		for _, msg := range e.agent.PendingMessages {
+			prompt += fmt.Sprintf("- From: %s\n  Subject: %s\n  Message: %v\n\n", msg.From, msg.Subject, msg.Content)
+		}
+		prompt += "Please address these requests if they are relevant to your current task or if you can answer them quickly.\n\n"
+	}
+	e.agent.mu.RUnlock()
+
 	prompt += `Please complete this task. You can use the available tools if needed.
 When you are done, provide your final answer.
 
@@ -151,6 +183,36 @@ If you need to run commands, use the shell_exec or npm_run tools.
 `
 
 	return prompt
+}
+
+// checkForNewMessages checks for and injects new inter-agent messages into the conversation history
+func (e *AgentExecutor) checkForNewMessages(history *[]string) {
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+
+	if len(e.agent.Inbox) > 0 {
+		// Drain inbox and handle messages (this will put them in PendingMessages)
+		for len(e.agent.Inbox) > 0 {
+			msg := <-e.agent.Inbox
+			// We need a way to call handleMessage without re-locking
+			// Let's refactor handleMessage to have an internal version or just do it here
+			log.Printf("Agent %s (%s) received asynchronous message: %s from %s", e.agent.Name, e.agent.ID, msg.Type, msg.From)
+			switch msg.Type {
+			case MessageQuestion, MessageRequest:
+				e.agent.PendingMessages = append(e.agent.PendingMessages, msg)
+				// Inject immediately into history
+				*history = append(*history, fmt.Sprintf("System Notification: New message received from %s\nSubject: %s\nContent: %v", msg.From, msg.Subject, msg.Content))
+			case MessageArtifact:
+				if artifact, ok := msg.Content.(Artifact); ok {
+					e.agent.Artifacts = append(e.agent.Artifacts, artifact)
+					if e.agent.Context != nil {
+						e.agent.Context.SharedArtifacts = append(e.agent.Context.SharedArtifacts, artifact)
+					}
+					*history = append(*history, fmt.Sprintf("System Notification: Agent %s shared an artifact: %s", msg.From, artifact.Path))
+				}
+			}
+		}
+	}
 }
 
 // extractToolCall tries to parse a tool call from LLM output
