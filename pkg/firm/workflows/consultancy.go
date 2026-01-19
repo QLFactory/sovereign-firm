@@ -557,6 +557,14 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 	if reqResult != nil {
 		archInput["requirements"] = reqResult
 	}
+	// Include brownfield analysis results if available
+	if state.BrownfieldStatus != nil && state.BrownfieldStatus.Status == "complete" {
+		archInput["brownfield_status"] = state.BrownfieldStatus
+		archInput["existing_tech_stack"] = state.TechStack
+		logger.Info("Including brownfield analysis in architecture input",
+			"files_indexed", state.BrownfieldStatus.FilesIndexed,
+			"symbols_found", state.BrownfieldStatus.SymbolsFound)
+	}
 
 	var systemDesign map[string]interface{}
 	if err := workflow.ExecuteActivity(ctxMedium, "ArchitectAnalyzeRequirements", archInput).Get(ctx, &systemDesign); err != nil {
@@ -662,7 +670,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 		if frontendErr == nil {
 			state.FrontendCode = result
 			for k, v := range result {
-				state.AllCodeFiles[k] = v
+				state.AllCodeFiles["frontend/"+k] = v
 			}
 		}
 		// Remove agent
@@ -824,7 +832,7 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 	} else {
 		state.UnitTests = unitTests
 		for k, v := range unitTests {
-			state.AllCodeFiles[k] = v
+			state.AllCodeFiles["tests/unit/"+k] = v
 		}
 	}
 

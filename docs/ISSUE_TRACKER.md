@@ -118,19 +118,21 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-011: File Collisions in AllCodeFiles
 - **File**: `pkg/firm/workflows/consultancy.go`
-- **Lines**: 659-730
+- **Lines**: 665, 827
 - **Description**: Files from all agents merged into single map without namespacing. Same filename from different agents overwrites.
 - **Impact**: Code lost, wrong files used in build
 - **Fix**: Namespace by agent ID or use list instead of map
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `frontend/` prefix to frontend code files. Added `tests/unit/` prefix to unit tests. Backend already had `backend/` prefix.
 
 ### ISS-012: Brownfield Results Not Passed to Architect
 - **File**: `pkg/firm/workflows/consultancy.go`
-- **Lines**: ~400-450
+- **Lines**: 560-567
 - **Description**: Brownfield analysis results stored but not passed to Architect activity input.
 - **Impact**: Architect designs without knowledge of existing codebase
 - **Fix**: Include brownfield results in ArchitectInput struct
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `brownfield_status` and `existing_tech_stack` to architect input when brownfield analysis is complete.
 
 ### ISS-013: Fake Token Counting
 - **File**: `pkg/agent/executor.go`
@@ -302,10 +304,10 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
 | P0 | 8 | 0 | 0 | 8 |
-| P1 | 6 | 4 | 0 | 2 |
+| P1 | 6 | 2 | 0 | 4 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **17** | **0** | **10** |
+| **Total** | **27** | **15** | **0** | **12** |
 
 ---
 
