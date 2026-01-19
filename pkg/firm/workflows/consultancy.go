@@ -260,9 +260,13 @@ func ConsultancyWorkflow(ctx workflow.Context, config ConsultancyConfig) (*Consu
 				{ID: "development", Name: "Code Generation", Type: "development", Status: "PENDING", Dependencies: []string{"architecture"}},
 				{ID: "testing", Name: "Quality Assurance", Type: "testing", Status: "PENDING", Dependencies: []string{"development"}},
 				{ID: "deployment", Name: "Cloud Deployment", Type: "devops", Status: "PENDING", Dependencies: []string{"testing"}},
+				{ID: "operations", Name: "Operations Setup", Type: "devops", Status: "PENDING", Dependencies: []string{"deployment"}},
+				{ID: "handoff", Name: "Project Handoff", Type: "delivery", Status: "PENDING", Dependencies: []string{"operations"}},
+				{ID: "review", Name: "Final Review", Type: "review", Status: "PENDING", Dependencies: []string{"handoff"}},
+				{ID: "complete", Name: "Project Complete", Type: "milestone", Status: "PENDING", Dependencies: []string{"review"}},
 			},
-			Total:   7,
-			Pending: 6,
+			Total:   11,
+			Pending: 10,
 			Running: 1,
 		},
 	}
@@ -1189,10 +1193,10 @@ Build a modern, responsive frontend application.`, config.ProjectName, frontendT
 
 // Helper functions
 
-func transitionPhase(state *ConsultancyState, phase ConsultancyPhase) {
+func transitionPhase(state *ConsultancyState, phase ConsultancyPhase, now time.Time) {
 	state.Phase = phase
 	state.PhaseHistory = append(state.PhaseHistory, string(phase))
-	state.UpdatedAt = time.Now()
+	state.UpdatedAt = now
 
 	// Update DAG if present
 	if state.DAG != nil {
@@ -1221,7 +1225,7 @@ func transitionPhase(state *ConsultancyState, phase ConsultancyPhase) {
 
 // transitionPhaseWithDB transitions the phase and updates the database
 func transitionPhaseWithDB(ctx workflow.Context, state *ConsultancyState, phase ConsultancyPhase) {
-	transitionPhase(state, phase)
+	transitionPhase(state, phase, workflow.Now(ctx))
 
 	// Update database - wait for activity to complete (quick operation)
 	ao := workflow.ActivityOptions{

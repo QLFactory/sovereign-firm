@@ -100,19 +100,21 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-009: Incomplete DAG State
 - **File**: `pkg/firm/workflows/consultancy.go`
-- **Lines**: 251-266
+- **Lines**: 252-271
 - **Description**: DAG only defines 7 tasks but workflow has 11 phases. Missing: QA, SRE, BROWNFIELD, COMPLETE.
 - **Impact**: Progress tracking incorrect, UI shows wrong state
 - **Fix**: Add all phases to DAG definition
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added operations, handoff, review, and complete tasks to DAG. Now 11 tasks matching all workflow phases.
 
 ### ISS-010: Non-Deterministic Timestamp
 - **File**: `pkg/firm/workflows/consultancy.go`
-- **Line**: 1184
+- **Lines**: 1196, 1228
 - **Description**: Uses `time.Now()` instead of `workflow.Now(ctx)`. Breaks Temporal's deterministic replay.
 - **Impact**: Workflow replay fails, state corruption on recovery
 - **Fix**: Replace with `workflow.Now(ctx)`
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Refactored `transitionPhase` to accept time parameter. `transitionPhaseWithDB` now passes `workflow.Now(ctx)`.
 
 ### ISS-011: File Collisions in AllCodeFiles
 - **File**: `pkg/firm/workflows/consultancy.go`
@@ -300,10 +302,10 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
 | P0 | 8 | 0 | 0 | 8 |
-| P1 | 6 | 6 | 0 | 0 |
+| P1 | 6 | 4 | 0 | 2 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **19** | **0** | **8** |
+| **Total** | **27** | **17** | **0** | **10** |
 
 ---
 

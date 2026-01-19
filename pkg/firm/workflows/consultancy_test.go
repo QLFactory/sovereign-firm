@@ -188,11 +188,13 @@ func TestTransitionPhase(t *testing.T) {
 		PhaseHistory: []string{string(PhaseIntake)},
 	}
 
-	transitionPhase(state, PhaseSizing)
+	now := time.Now()
+	transitionPhase(state, PhaseSizing, now)
 
 	assert.Equal(t, PhaseSizing, state.Phase)
 	assert.Equal(t, 2, len(state.PhaseHistory))
 	assert.Equal(t, string(PhaseSizing), state.PhaseHistory[1])
+	assert.Equal(t, now, state.UpdatedAt)
 }
 
 func TestGetString(t *testing.T) {
