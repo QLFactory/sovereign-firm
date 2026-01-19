@@ -193,7 +193,10 @@ func TestAgentAddArtifact(t *testing.T) {
 func TestAgentSendMessage(t *testing.T) {
 	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 
-	agent.SendMessage(MessageQuestion, "other-agent", "Test Subject", "Test Content")
+	sent := agent.SendMessage(MessageQuestion, "other-agent", "Test Subject", "Test Content")
+	if !sent {
+		t.Error("Expected SendMessage to return true")
+	}
 
 	select {
 	case msg := <-agent.Outbox:
@@ -209,7 +212,7 @@ func TestAgentSendMessage(t *testing.T) {
 		if msg.Subject != "Test Subject" {
 			t.Errorf("Expected subject 'Test Subject', got '%s'", msg.Subject)
 		}
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		t.Error("Expected message in outbox, timed out")
 	}
 }

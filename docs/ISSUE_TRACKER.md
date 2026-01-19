@@ -51,19 +51,21 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-004: Silent Message Loss - Agent Outbox
 - **File**: `pkg/agent/agent.go`
-- **Lines**: 291-296
+- **Lines**: 281-306
 - **Description**: Non-blocking send to outbox channel. If buffer full, message silently dropped.
 - **Impact**: Inter-agent messages lost without notification
 - **Fix**: Use blocking send with timeout, log/retry on failure
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: `SendMessage` now uses 100ms timeout, logs warning on drop, returns bool to indicate success/failure.
 
 ### ISS-005: Silent Message Loss - Pool Inbox
 - **File**: `pkg/agent/pool.go`
-- **Lines**: 214-230
+- **Lines**: 242-253
 - **Description**: Non-blocking send to agent inbox. If buffer full, message silently dropped.
 - **Impact**: Workflow signals lost, agents miss instructions
 - **Fix**: Use blocking send with timeout, return error to caller
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: New `deliverToAgent` helper uses 100ms timeout. Logs warning on drop. Also logs when message sent to unknown agent.
 
 ### ISS-006: No Panic Recovery in Message Processor
 - **File**: `pkg/agent/agent.go`
@@ -294,11 +296,11 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
-| P0 | 8 | 5 | 0 | 3 |
+| P0 | 8 | 3 | 0 | 5 |
 | P1 | 6 | 6 | 0 | 0 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **24** | **0** | **3** |
+| **Total** | **27** | **22** | **0** | **5** |
 
 ---
 

@@ -225,22 +225,30 @@ func (p *AgentPool) routeMessage(msg Message) {
 		// Broadcast to all agents
 		for _, agent := range p.agents {
 			if agent.ID != msg.From {
-				select {
-				case agent.Inbox <- msg:
-				default:
-					// Inbox full
-				}
+				p.deliverToAgent(agent, msg)
 			}
 		}
 	} else {
 		// Send to specific agent
 		if agent, ok := p.agents[msg.To]; ok {
-			select {
-			case agent.Inbox <- msg:
-			default:
-				// Inbox full
-			}
+			p.deliverToAgent(agent, msg)
+		} else {
+			log.Printf("WARNING: Message to unknown agent %s dropped (from: %s, subject: %s)",
+				msg.To, msg.From, msg.Subject)
 		}
+	}
+}
+
+// deliverToAgent attempts to deliver a message to an agent's inbox with timeout
+func (p *AgentPool) deliverToAgent(agent *AgentInstance, msg Message) {
+	select {
+	case agent.Inbox <- msg:
+		// Delivered successfully
+	case <-time.After(100 * time.Millisecond):
+		log.Printf("WARNING: Agent %s (%s) inbox full, message from %s dropped (subject: %s)",
+			agent.Name, agent.ID, msg.From, msg.Subject)
+	case <-p.ctx.Done():
+		// Pool is shutting down
 	}
 }
 

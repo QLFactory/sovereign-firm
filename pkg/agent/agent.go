@@ -278,8 +278,9 @@ func (a *AgentInstance) AddArtifact(artifactType, path, content, language, descr
 	return &artifact
 }
 
-// SendMessage sends a message to another agent
-func (a *AgentInstance) SendMessage(msgType MessageType, to, subject string, content interface{}) {
+// SendMessage sends a message to another agent.
+// Returns true if message was sent, false if outbox is full (message dropped).
+func (a *AgentInstance) SendMessage(msgType MessageType, to, subject string, content interface{}) bool {
 	msg := Message{
 		ID:        uuid.New().String(),
 		Type:      msgType,
@@ -290,10 +291,17 @@ func (a *AgentInstance) SendMessage(msgType MessageType, to, subject string, con
 		Timestamp: time.Now(),
 	}
 
+	// Use a short timeout to give the channel a chance to drain
 	select {
 	case a.Outbox <- msg:
-	default:
-		// Outbox full, log warning
+		return true
+	case <-time.After(100 * time.Millisecond):
+		log.Printf("WARNING: Agent %s (%s) outbox full, message to %s dropped (subject: %s)",
+			a.Name, a.ID, to, subject)
+		return false
+	case <-a.ctx.Done():
+		// Agent is shutting down
+		return false
 	}
 }
 
