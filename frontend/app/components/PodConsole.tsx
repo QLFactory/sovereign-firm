@@ -104,6 +104,10 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
   // Streaming state
   const fileBuffersRef = useRef<Record<string, string[]>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
+  // Ref to track selected file without triggering useEffect re-runs (ISS-015)
+  const selectedFileRef = useRef<string | null>(null);
+  // Track previous workflow ID to detect changes (ISS-016)
+  const prevWorkflowIDRef = useRef<string | null>(null);
 
   // Initialize workflow ID from prop, URL param, or localStorage
   useEffect(() => {
@@ -318,8 +322,8 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
     setStreamEvents((prev) => [...prev.slice(-200), event]); // Keep last 200 events
   }, [addTerminalLine, selectedFile]);
 
-  // Streaming hook
-  useStreaming({
+  // Streaming hook - ISS-018: use isConnected for UI feedback
+  const { isConnected: streamConnected } = useStreaming({
     workflowId: workflowID,
     onEvent: handleStreamEvent,
     onConnect: () => {
@@ -328,11 +332,33 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
     },
     onDisconnect: () => {
       console.log("Streaming disconnected");
+      addTerminalLine("⚠️ Stream disconnected - reconnecting...");
     },
     onError: (err) => {
       console.error("Streaming error:", err);
+      addTerminalLine(`❌ Stream error: ${err.message}`);
     },
+    reconnectAttempts: 10, // More attempts for resilience
+    reconnectDelay: 1000,  // Start with 1s, exponential backoff
   });
+
+  // Keep selectedFileRef in sync (ISS-015: avoid dependency array issues)
+  useEffect(() => {
+    selectedFileRef.current = selectedFile;
+  }, [selectedFile]);
+
+  // Clear file buffers and state when workflow changes (ISS-016: prevent memory leak)
+  useEffect(() => {
+    if (workflowID !== prevWorkflowIDRef.current) {
+      if (prevWorkflowIDRef.current !== null) {
+        // Workflow changed - clear accumulated buffers and files
+        fileBuffersRef.current = {};
+        setFiles({});
+        setSelectedFile(null);
+      }
+      prevWorkflowIDRef.current = workflowID;
+    }
+  }, [workflowID]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -406,6 +432,8 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
   }, [isInitialized]); // Only run once after initialization
 
   // Poll for workflow updates
+  // ISS-015: removed selectedFile from deps - use ref instead to avoid polling reset
+  // ISS-017: replace files instead of merge to handle deletions
   useEffect(() => {
     if (!workflowID) return;
 
@@ -442,22 +470,21 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
           const codeFiles = state.all_code_files || state.code_files || {};
 
           // Also merge frontend_code and backend_code if available
-          const mergedFiles = {
+          const newFiles = {
             ...codeFiles,
             ...(state.frontend_code || {}),
             ...(state.backend_code || {}),
             ...(state.database_code || {}),
           };
 
-          if (Object.keys(mergedFiles).length > 0) {
-            setFiles((prev) => ({
-              ...prev,
-              ...mergedFiles,
-            }));
+          // ISS-017: Replace files entirely on poll (authoritative state from server)
+          // This ensures deleted files don't persist in the UI
+          if (Object.keys(newFiles).length > 0) {
+            setFiles(newFiles);
 
-            // Auto-select App.jsx if not already selected
-            if (!selectedFile) {
-              const appFile = Object.keys(mergedFiles).find(
+            // Auto-select App.jsx if not already selected (use ref to avoid dep array)
+            if (!selectedFileRef.current) {
+              const appFile = Object.keys(newFiles).find(
                 (f) => f.includes("App.jsx") || f.includes("App.tsx")
               );
               if (appFile) setSelectedFile(appFile);
@@ -470,7 +497,7 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [workflowID, selectedFile]);
+  }, [workflowID]);
 
   // Send message to workflow
   const sendMessage = async () => {
@@ -628,6 +655,13 @@ export default function PodConsole({ workflowId: propWorkflowId }: PodConsolePro
                 <span className={`text-[11px] font-medium tracking-wide ${status.includes("Error") ? "text-[var(--rose-glow)]" : "text-[var(--silver)]"}`}>
                   {status}
                 </span>
+                {/* ISS-018: Connection status indicator */}
+                {workflowID && (
+                  <span className={`flex items-center gap-1 text-[10px] font-medium ${streamConnected ? "text-[var(--emerald-glow)]" : "text-[var(--amber-glow)]"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${streamConnected ? "bg-[var(--emerald-glow)]" : "bg-[var(--amber-glow)] animate-pulse"}`} />
+                    {streamConnected ? "Live" : "Reconnecting..."}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex gap-2">

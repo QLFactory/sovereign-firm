@@ -26,12 +26,26 @@ const REFRESH_TOKEN_KEY = "sovereign-firm-refresh-token";
 class ApiClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  // ISS-019: Track in-flight refresh to prevent race conditions
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor() {
     // Load tokens from localStorage on init
     if (typeof window !== "undefined") {
       this.accessToken = localStorage.getItem(AUTH_TOKEN_KEY);
       this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+
+      // ISS-020: Listen for cross-tab token updates
+      window.addEventListener("storage", this.handleStorageChange.bind(this));
+    }
+  }
+
+  // ISS-020: Sync tokens when another tab updates localStorage
+  private handleStorageChange(event: StorageEvent): void {
+    if (event.key === AUTH_TOKEN_KEY) {
+      this.accessToken = event.newValue;
+    } else if (event.key === REFRESH_TOKEN_KEY) {
+      this.refreshToken = event.newValue;
     }
   }
 
@@ -115,9 +129,27 @@ class ApiClient {
     return response.json();
   }
 
+  // ISS-019: Deduplicate concurrent refresh requests with shared promise
   private async tryRefreshToken(): Promise<boolean> {
     if (!this.refreshToken) return false;
 
+    // If a refresh is already in progress, wait for it instead of starting a new one
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    // Start new refresh and track the promise
+    this.refreshPromise = this.doRefreshToken();
+
+    try {
+      return await this.refreshPromise;
+    } finally {
+      // Clear the promise so future refreshes can proceed
+      this.refreshPromise = null;
+    }
+  }
+
+  private async doRefreshToken(): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE}/auth/refresh`, {
         method: "POST",

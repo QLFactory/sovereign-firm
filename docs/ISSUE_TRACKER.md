@@ -158,51 +158,57 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-015: Polling Dependency Array Bug
 - **File**: `frontend/app/components/PodConsole.tsx`
-- **Line**: 473
+- **Line**: 496
 - **Description**: `selectedFile` in useEffect dependency array causes polling to reset on every file selection.
 - **Impact**: UX stuttering, lost updates during file browsing
 - **Fix**: Remove `selectedFile` from dependency array or use ref
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `selectedFileRef` to track selected file without triggering re-renders. Removed `selectedFile` from polling useEffect deps.
 
 ### ISS-016: Memory Leak - File Buffers
 - **File**: `frontend/app/components/PodConsole.tsx`
-- **Lines**: 179-189
+- **Lines**: 346-357
 - **Description**: `fileBuffersRef` accumulates file contents but never cleared on project change.
 - **Impact**: Browser memory grows, eventual crash on long sessions
 - **Fix**: Clear buffers on project change or component unmount
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `prevWorkflowIDRef` to detect workflow changes. useEffect clears fileBuffersRef and files state when workflowID changes.
 
 ### ISS-017: Files Only Merged, Never Replaced
 - **File**: `frontend/app/components/PodConsole.tsx`
-- **Lines**: 453-456
+- **Lines**: 476-488
 - **Description**: File updates merged into existing map. Deleted files persist.
 - **Impact**: Stale files shown, incorrect file tree
 - **Fix**: Replace file map on full refresh, merge only on incremental
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Polling now replaces files entirely (`setFiles(newFiles)`) instead of merging. Server state is authoritative.
 
 ### ISS-018: Silent Disconnect Handling
-- **File**: `frontend/app/hooks/useStreaming.ts`
-- **Lines**: 329-331
+- **File**: `frontend/app/components/PodConsole.tsx`
+- **Lines**: 325-343
 - **Description**: `onDisconnect` callback defined but does nothing. No retry logic.
 - **Impact**: WebSocket disconnect silently fails, user sees stale data
 - **Fix**: Implement reconnection with exponential backoff
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: useStreaming already had reconnection logic. Added terminal line on disconnect, increased reconnect attempts to 10, added visual "Live"/"Reconnecting" indicator in header.
 
 ### ISS-019: Token Refresh Race Condition
 - **File**: `frontend/app/lib/api/client.ts`
-- **Lines**: 88-106
+- **Lines**: 132-168
 - **Description**: Multiple concurrent 401 responses each trigger token refresh. Race condition on refresh token usage.
 - **Impact**: Auth failures, user logged out unexpectedly
 - **Fix**: Add mutex/queue for refresh, deduplicate concurrent refreshes
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `refreshPromise` field. `tryRefreshToken` returns existing promise if refresh in progress, preventing duplicate refreshes.
 
 ### ISS-020: Multi-Tab localStorage Sync
 - **File**: `frontend/app/lib/api/client.ts`
-- **Lines**: 43-44
+- **Lines**: 38-50
 - **Description**: Token stored in localStorage but no cross-tab sync. One tab refreshes, others have stale token.
 - **Impact**: Multi-tab usage causes auth errors
 - **Fix**: Use storage event listener or BroadcastChannel
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `storage` event listener in constructor. `handleStorageChange` syncs in-memory tokens when other tabs update localStorage.
 
 ---
 
@@ -307,9 +313,9 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 |----------|-------|------|-------------|------|
 | P0 | 8 | 0 | 0 | 8 |
 | P1 | 6 | 0 | 0 | 6 |
-| P2 | 6 | 6 | 0 | 0 |
+| P2 | 6 | 0 | 0 | 6 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **13** | **0** | **14** |
+| **Total** | **27** | **7** | **0** | **20** |
 
 ---
 
