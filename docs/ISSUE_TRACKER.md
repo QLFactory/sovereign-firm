@@ -24,11 +24,12 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-001: Deadlock in Message Checker
 - **File**: `pkg/agent/executor.go`
-- **Lines**: 188-216
+- **Lines**: 188-219
 - **Description**: `checkForNewMessages()` holds mutex lock while receiving from channel. If channel blocks, entire executor deadlocks.
 - **Impact**: Complete workflow stall, unrecoverable without restart
 - **Fix**: Release lock before channel receive, use select with timeout
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Refactored to use non-blocking `select` with `default` case. Lock acquired only briefly per message, never during channel operations.
 
 ### ISS-002: Goroutine Leak - Agent Context
 - **File**: `pkg/agent/agent.go`
@@ -291,11 +292,11 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
-| P0 | 8 | 8 | 0 | 0 |
+| P0 | 8 | 7 | 0 | 1 |
 | P1 | 6 | 6 | 0 | 0 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **27** | **0** | **0** |
+| **Total** | **27** | **26** | **0** | **1** |
 
 ---
 

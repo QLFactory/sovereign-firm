@@ -185,17 +185,16 @@ If you need to run commands, use the shell_exec or npm_run tools.
 	return prompt
 }
 
-// checkForNewMessages checks for and injects new inter-agent messages into the conversation history
+// checkForNewMessages checks for and injects new inter-agent messages into the conversation history.
+// Uses non-blocking receives to avoid deadlock - never holds mutex while waiting on channel.
 func (e *AgentExecutor) checkForNewMessages(history *[]string) {
-	e.agent.mu.Lock()
-	defer e.agent.mu.Unlock()
-
-	if len(e.agent.Inbox) > 0 {
-		// Drain inbox and handle messages (this will put them in PendingMessages)
-		for len(e.agent.Inbox) > 0 {
-			msg := <-e.agent.Inbox
-			// We need a way to call handleMessage without re-locking
-			// Let's refactor handleMessage to have an internal version or just do it here
+	// Drain inbox using non-blocking receives to prevent deadlock.
+	// The lock is only held briefly per message, not during channel operations.
+	for {
+		select {
+		case msg := <-e.agent.Inbox:
+			// Got a message - now acquire lock briefly to update state
+			e.agent.mu.Lock()
 			log.Printf("Agent %s (%s) received asynchronous message: %s from %s", e.agent.Name, e.agent.ID, msg.Type, msg.From)
 			switch msg.Type {
 			case MessageQuestion, MessageRequest:
@@ -211,6 +210,10 @@ func (e *AgentExecutor) checkForNewMessages(history *[]string) {
 					*history = append(*history, fmt.Sprintf("System Notification: Agent %s shared an artifact: %s", msg.From, artifact.Path))
 				}
 			}
+			e.agent.mu.Unlock()
+		default:
+			// No more messages available, exit without blocking
+			return
 		}
 	}
 }
