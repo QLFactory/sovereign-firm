@@ -139,6 +139,7 @@ func (s *SkillInjector) SpawnSkilledAgent(ctx context.Context, input AgentSpawnI
 	}
 
 	agentInstance, matches := s.registry.GetSkilledAgent(
+		ctx,
 		input.AgentName,
 		input.AgentRole,
 		input.ProjectID,

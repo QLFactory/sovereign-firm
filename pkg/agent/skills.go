@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -458,8 +459,10 @@ func (r *SkillRegistry) SelectSkillsForRequirements(req *SkillRequirements) []Sk
 	return matches
 }
 
-// GetSkilledAgent creates an agent with skills injected based on requirements
+// GetSkilledAgent creates an agent with skills injected based on requirements.
+// The ctx parameter should be a parent context (e.g., pool context) for proper cancellation.
 func (r *SkillRegistry) GetSkilledAgent(
+	ctx context.Context,
 	name, role, projectID, model string,
 	requirements *SkillRequirements,
 	llmClient llm.Client,
@@ -476,7 +479,7 @@ func (r *SkillRegistry) GetSkilledAgent(
 	}
 
 	// Create agent with selected skills
-	agent := NewAgentInstance(name, role, projectID, model, skills, llmClient)
+	agent := NewAgentInstance(ctx, name, role, projectID, model, skills, llmClient)
 
 	return agent, matches
 }

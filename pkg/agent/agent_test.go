@@ -38,7 +38,7 @@ func TestNewAgentInstance(t *testing.T) {
 		},
 	}
 
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", skills, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", skills, &mockLLMClient{})
 
 	if agent == nil {
 		t.Fatal("Expected agent to be created, got nil")
@@ -70,7 +70,7 @@ func TestNewAgentInstance(t *testing.T) {
 }
 
 func TestAgentSpawn(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 
 	err := agent.Spawn(context.Background())
 	if err != nil {
@@ -89,7 +89,7 @@ func TestAgentSpawn(t *testing.T) {
 }
 
 func TestAgentAssignTask(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 	agent.Spawn(context.Background())
 
 	task := &Task{
@@ -125,7 +125,7 @@ func TestAgentAssignTask(t *testing.T) {
 }
 
 func TestAgentCompleteTask(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 	agent.Spawn(context.Background())
 
 	task := &Task{
@@ -165,7 +165,7 @@ func TestAgentCompleteTask(t *testing.T) {
 }
 
 func TestAgentAddArtifact(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 
 	artifact := agent.AddArtifact("file", "/src/main.go", "package main", "go", "Main entry point")
 
@@ -191,7 +191,7 @@ func TestAgentAddArtifact(t *testing.T) {
 }
 
 func TestAgentSendMessage(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 
 	agent.SendMessage(MessageQuestion, "other-agent", "Test Subject", "Test Content")
 
@@ -215,7 +215,7 @@ func TestAgentSendMessage(t *testing.T) {
 }
 
 func TestAgentTerminate(t *testing.T) {
-	agent := NewAgentInstance("TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "TestBot", "tester", "project-123", "gpt-4", nil, &mockLLMClient{})
 	agent.Spawn(context.Background())
 
 	if !agent.IsAlive() {
@@ -255,7 +255,7 @@ func TestAgentSystemPromptCompilation(t *testing.T) {
 		},
 	}
 
-	agent := NewAgentInstance("Alice", "developer", "project-123", "gpt-4", skills, &mockLLMClient{})
+	agent := NewAgentInstance(context.Background(), "Alice", "developer", "project-123", "gpt-4", skills, &mockLLMClient{})
 
 	if agent.SystemPrompt == "" {
 		t.Error("Expected system prompt to be compiled")

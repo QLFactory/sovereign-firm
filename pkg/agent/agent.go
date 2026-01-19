@@ -148,13 +148,15 @@ type AgentInstance struct {
 	cancel    context.CancelFunc
 }
 
-// NewAgentInstance creates a new agent instance with the given configuration
+// NewAgentInstance creates a new agent instance with the given configuration.
+// The parentCtx should be the pool's context so agent goroutines are cancelled on pool shutdown.
 func NewAgentInstance(
+	parentCtx context.Context,
 	name, role, projectID, model string,
 	skills []Skill,
 	llmClient llm.Client,
 ) *AgentInstance {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parentCtx)
 
 	agent := &AgentInstance{
 		ID:              uuid.New().String(),

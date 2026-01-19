@@ -37,15 +37,17 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 - **Description**: Agent context uses `context.Background()` instead of pool context. Agent goroutines survive pool shutdown.
 - **Impact**: Memory leak, zombie goroutines accumulate over time
 - **Fix**: Pass pool context to agent, propagate cancellation
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: `NewAgentInstance` now takes `parentCtx` parameter. Pool passes its context, so agent goroutines are cancelled on pool shutdown.
 
 ### ISS-003: Goroutine Leak - Outbox Forwarder
 - **File**: `pkg/agent/pool.go`
-- **Lines**: 116-120
+- **Lines**: 116-134
 - **Description**: Outbox forwarder goroutine started but never tracked or stopped on pool shutdown.
 - **Impact**: Leaked goroutines, potential panic on closed channel
 - **Fix**: Track goroutine with WaitGroup, cancel on shutdown
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Outbox forwarder now uses `select` with `p.ctx.Done()` to exit on pool shutdown. Also handles channel close gracefully.
 
 ### ISS-004: Silent Message Loss - Agent Outbox
 - **File**: `pkg/agent/agent.go`
@@ -292,11 +294,11 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
-| P0 | 8 | 7 | 0 | 1 |
+| P0 | 8 | 5 | 0 | 3 |
 | P1 | 6 | 6 | 0 | 0 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **26** | **0** | **1** |
+| **Total** | **27** | **24** | **0** | **3** |
 
 ---
 

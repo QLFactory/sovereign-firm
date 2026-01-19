@@ -97,8 +97,8 @@ func (p *AgentPool) SpawnAgent(
 		skills = append(skills, *skill)
 	}
 
-	// Create agent
-	agent := NewAgentInstance(name, role, projectID, model, skills, p.llmClient)
+	// Create agent with pool's context so it's cancelled on pool shutdown
+	agent := NewAgentInstance(p.ctx, name, role, projectID, model, skills, p.llmClient)
 
 	// Spawn the agent
 	if err := agent.Spawn(ctx); err != nil {
@@ -112,10 +112,24 @@ func (p *AgentPool) SpawnAgent(
 	}
 	p.byProject[projectID][agent.ID] = agent
 
-	// Wire up outbox to message bus
+	// Wire up outbox to message bus with proper cancellation
 	go func() {
-		for msg := range agent.Outbox {
-			p.messageBus <- msg
+		for {
+			select {
+			case <-p.ctx.Done():
+				// Pool is shutting down
+				return
+			case msg, ok := <-agent.Outbox:
+				if !ok {
+					// Channel closed (agent terminated)
+					return
+				}
+				select {
+				case p.messageBus <- msg:
+				case <-p.ctx.Done():
+					return
+				}
+			}
 		}
 	}()
 
