@@ -76,7 +76,9 @@ describe('App', () => {
 		codeContext += fmt.Sprintf("File: %s\n```\n%s\n```\n", name, content)
 	}
 
-	prompt := fmt.Sprintf("%s\n%s\n\nSPECIFICATION:\n%s\n\nGenerate test files ONLY for the files listed above. Do NOT create tests for files that don't exist.", fileList, codeContext, spec)
+	// ISS-025: Sanitize user input to prevent prompt injection
+	prompt := fmt.Sprintf("%s\n%s\n\n%s\n\nGenerate test files ONLY for the files listed above. Do NOT create tests for files that don't exist.",
+		fileList, codeContext, SanitizeUserInput("user-specification", spec))
 
 	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
 		Prompt: prompt,

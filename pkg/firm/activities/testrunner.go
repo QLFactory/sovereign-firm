@@ -95,12 +95,16 @@ func (t *TestRunner) RunTests(ctx context.Context, input map[string]interface{})
 	}
 
 	// Create sandbox configuration
+	// ISS-026: Network disabled by default for security - tests should not have network access
+	// This prevents test code from exfiltrating data or attacking internal services.
+	// npm install uses --prefer-offline to use cached packages.
+	// For production, ensure npm packages are pre-cached or use a private registry.
 	config := sandbox.DefaultConfig(sandbox.LevelContainer)
 	config.ID = "test-" + strings.ReplaceAll(time.Now().Format("20060102-150405.000"), ".", "-")
 	config.ProjectID = "test-runner-app"
 	config.Language = "javascript"
 	config.ReadOnlyRoot = false
-	config.NetworkEnabled = true
+	config.NetworkEnabled = false // ISS-026: Disabled for security
 	config.MaxMemory = 1024
 
 	// Create and start sandbox

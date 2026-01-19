@@ -58,3 +58,6 @@ reg.json
 jwt_rs256.key
 jwt_rs256.key.pub
 *.pem
+
+# Secrets directory (Docker secrets - ISS-027)
+secrets/

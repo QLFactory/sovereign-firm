@@ -90,8 +90,9 @@ root.render(<BrowserRouter><App /></BrowserRouter>);
 
 	// Execute via AgentExecutor
 	executor := agent.NewAgentExecutor(agentInstance, registry, a.llmClient)
+	// ISS-023: Sanitize user input to prevent prompt injection
 	task := &agent.Task{
-		Description: sysPrompt + "\n\nRequirements:\n" + spec,
+		Description: sysPrompt + "\n\n" + SanitizeUserInput("user-requirements", spec),
 		Type:        "code_generate",
 	}
 
@@ -274,12 +275,14 @@ IMPORTANT: Fix any validation errors first before implementing new features.
 		codeContext += fmt.Sprintf("File: %s\n```\n%s\n```\n", name, content)
 	}
 
+	// ISS-023: Sanitize user input to prevent prompt injection
 	var prompt string
 	if req.ValidationFeedback != "" {
-		// Self-correction mode: focus on fixing validation errors
+		// Self-correction mode: focus on fixing validation errors (feedback is system-generated, not user input)
 		prompt = fmt.Sprintf("%s\n\nVALIDATION ERRORS TO FIX:\n%s\n\nFix these validation errors and generate the JSON of corrected files.", codeContext, req.ValidationFeedback)
 	} else {
-		prompt = fmt.Sprintf("%s\n\nFEEDBACK/INSTRUCTIONS:\n%s\n\nGenerate the JSON of modified files now.", codeContext, req.ChatHistory)
+		prompt = fmt.Sprintf("%s\n\n%s\n\nGenerate the JSON of modified files now.",
+			codeContext, SanitizeUserInput("user-feedback", req.ChatHistory))
 	}
 
 	// RAG (Refinement patterns?) - skipped for now to save context, or we could look up "how to change colors".

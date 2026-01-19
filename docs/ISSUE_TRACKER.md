@@ -216,59 +216,66 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-021: Path Traversal in MCP Tools
 - **File**: `pkg/mcp/builtin.go`
-- **Line**: 614
+- **Lines**: 620-649
 - **Description**: `resolvePath()` accepts absolute paths and `..` traversal. Can read/write outside workspace.
 - **Impact**: Arbitrary file access on host system
 - **Fix**: Validate paths are within workspace, reject absolute paths and `..`
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: `resolvePath` now returns error. Rejects absolute paths, cleans `..` components, verifies final path is within workDir. All file handlers updated to check error.
 
 ### ISS-022: No File Size Limits
 - **File**: `pkg/mcp/builtin.go`
-- **Lines**: 81, 117
+- **Lines**: 614-618, 87-95, 135-139
 - **Description**: `file_read` and `file_write` have no size bounds. Can read/write arbitrarily large files.
 - **Impact**: DoS via memory exhaustion
 - **Fix**: Add configurable max file size limit
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `MaxFileReadSize` (10MB) and `MaxFileWriteSize` (50MB) constants. fileReadHandler checks file size before reading. fileWriteHandler checks content size before writing.
 
 ### ISS-023: Prompt Injection - Dev Activity
 - **File**: `pkg/firm/activities/dev.go`
-- **Line**: 94
+- **Lines**: 93-96
 - **Description**: User specification concatenated directly into LLM prompt without sanitization.
 - **Impact**: User can inject instructions to LLM
 - **Fix**: Escape or structure user input in prompt
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Created `sanitize.go` with `SanitizeUserInput()` helper. Wraps user input in XML-like tags with explicit warning not to follow instructions within user content.
 
 ### ISS-024: Prompt Injection - Architect Activity
 - **File**: `pkg/firm/activities/architect.go`
-- **Line**: 283
+- **Lines**: 283-285
 - **Description**: User input embedded in architect prompt without sanitization.
 - **Impact**: User can manipulate architecture decisions
 - **Fix**: Escape or structure user input in prompt
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Uses `SanitizeUserInput()` to wrap user requirements in tagged format.
 
 ### ISS-025: Prompt Injection - QA Activity
 - **File**: `pkg/firm/activities/qa.go`
-- **Line**: 79
+- **Lines**: 79-81
 - **Description**: User spec passed directly to QA prompt.
 - **Impact**: User can bypass test generation
 - **Fix**: Escape or structure user input in prompt
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Uses `SanitizeUserInput()` to wrap user specification in tagged format.
 
 ### ISS-026: Network Access in Test Sandbox
 - **File**: `pkg/firm/activities/testrunner.go`
-- **Line**: 103
+- **Lines**: 97-108
 - **Description**: `config.NetworkEnabled = true` gives test sandbox full network access.
 - **Impact**: Tests can exfiltrate data or attack internal services
 - **Fix**: Disable network by default, whitelist specific endpoints if needed
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Set `config.NetworkEnabled = false`. npm install uses `--prefer-offline` for cached packages. Added documentation about pre-caching for production.
 
 ### ISS-027: Azure API Key in Environment
-- **File**: `docker-compose.yaml`
-- **Lines**: 69-72
+- **File**: `docker-compose.yaml`, `pkg/sovereign/llm/azure.go`
+- **Lines**: 59-92, 28-35
 - **Description**: Azure OpenAI API key passed via environment variable from `.env`.
 - **Impact**: Key visible in container inspection, process listing
 - **Fix**: Use Docker secrets or external secret manager
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added Docker secrets support. API key now read from `/run/secrets/azure_openai_api_key`. Azure client checks `AZURE_OPENAI_API_KEY_FILE` env var to read from file. Added `secrets/` to .gitignore.
 
 ---
 
@@ -314,8 +321,10 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 | P0 | 8 | 0 | 0 | 8 |
 | P1 | 6 | 0 | 0 | 6 |
 | P2 | 6 | 0 | 0 | 6 |
-| P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **7** | **0** | **20** |
+| P3 | 7 | 0 | 0 | 7 |
+| **Total** | **27** | **0** | **0** | **27** |
+
+🎉 **ALL ISSUES RESOLVED** - Ready for go-live review
 
 ---
 

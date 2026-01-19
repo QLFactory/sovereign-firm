@@ -25,7 +25,14 @@ func NewAzureOpenAIClient() *AzureOpenAIClient {
 		endpoint = "https://myazurellm.openai.azure.com/"
 	}
 
+	// ISS-027: Support reading API key from file (Docker secrets)
+	// Check for _FILE env var first, which points to a secret file
 	apiKey := os.Getenv("AZURE_OPENAI_API_KEY")
+	if apiKeyFile := os.Getenv("AZURE_OPENAI_API_KEY_FILE"); apiKeyFile != "" {
+		if data, err := os.ReadFile(apiKeyFile); err == nil {
+			apiKey = string(bytes.TrimSpace(data))
+		}
+	}
 
 	deploymentName := os.Getenv("AZURE_OPENAI_DEPLOYMENT")
 	if deploymentName == "" {

@@ -79,7 +79,20 @@ func fileReadDef() *ToolDefinition {
 func fileReadHandler(workDir string) ToolHandler {
 	return func(ctx context.Context, req *ToolRequest) *ToolResponse {
 		path, _ := req.Params["path"].(string)
-		fullPath := resolvePath(workDir, path)
+		fullPath, err := resolvePath(workDir, path)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "invalid path", err.Error())
+		}
+
+		// ISS-022: Check file size before reading
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodeExecutionFailed, "failed to stat file", err.Error())
+		}
+		if info.Size() > MaxFileReadSize {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "file too large",
+				fmt.Sprintf("file size %d exceeds maximum %d bytes", info.Size(), MaxFileReadSize))
+		}
 
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
@@ -114,7 +127,16 @@ func fileWriteHandler(workDir string) ToolHandler {
 		content, _ := req.Params["content"].(string)
 		appendMode, _ := req.Params["append"].(bool)
 
-		fullPath := resolvePath(workDir, path)
+		fullPath, err := resolvePath(workDir, path)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "invalid path", err.Error())
+		}
+
+		// ISS-022: Check content size before writing
+		if len(content) > MaxFileWriteSize {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "content too large",
+				fmt.Sprintf("content size %d exceeds maximum %d bytes", len(content), MaxFileWriteSize))
+		}
 
 		// Create parent directories
 		dir := filepath.Dir(fullPath)
@@ -122,15 +144,13 @@ func fileWriteHandler(workDir string) ToolHandler {
 			return errorResponse(req.ID, ErrCodeExecutionFailed, "failed to create directory", err.Error())
 		}
 
-		var err error
 		if appendMode {
 			f, ferr := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if ferr != nil {
-				err = ferr
-			} else {
-				_, err = f.WriteString(content)
-				f.Close()
+				return errorResponse(req.ID, ErrCodeExecutionFailed, "failed to open file", ferr.Error())
 			}
+			_, err = f.WriteString(content)
+			f.Close()
 		} else {
 			err = os.WriteFile(fullPath, []byte(content), 0644)
 		}
@@ -165,7 +185,10 @@ func fileListHandler(workDir string) ToolHandler {
 		path, _ := req.Params["path"].(string)
 		recursive, _ := req.Params["recursive"].(bool)
 
-		fullPath := resolvePath(workDir, path)
+		fullPath, err := resolvePath(workDir, path)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "invalid path", err.Error())
+		}
 
 		var files []string
 
@@ -210,11 +233,9 @@ func fileDeleteDef() *ToolDefinition {
 func fileDeleteHandler(workDir string) ToolHandler {
 	return func(ctx context.Context, req *ToolRequest) *ToolResponse {
 		path, _ := req.Params["path"].(string)
-		fullPath := resolvePath(workDir, path)
-
-		// Security: don't allow deleting outside workDir
-		if !strings.HasPrefix(fullPath, workDir) {
-			return errorResponse(req.ID, ErrCodePermissionDenied, "cannot delete files outside work directory", "")
+		fullPath, err := resolvePath(workDir, path)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "invalid path", err.Error())
 		}
 
 		if err := os.Remove(fullPath); err != nil {
@@ -509,7 +530,10 @@ func grepSearchHandler(workDir string) ToolHandler {
 		}
 		useRegex, _ := req.Params["regex"].(bool)
 
-		fullPath := resolvePath(workDir, path)
+		fullPath, err := resolvePath(workDir, path)
+		if err != nil {
+			return errorResponse(req.ID, ErrCodePermissionDenied, "invalid path", err.Error())
+		}
 
 		args := []string{"-r", "-n"}
 		if !useRegex {
@@ -611,11 +635,41 @@ func messageAgentHandler(config *ToolConfig) ToolHandler {
 // HELPER FUNCTIONS
 // =====================
 
-func resolvePath(workDir, path string) string {
+// MaxFileReadSize is the maximum file size that can be read (10MB)
+const MaxFileReadSize = 10 * 1024 * 1024
+
+// MaxFileWriteSize is the maximum file size that can be written (50MB)
+const MaxFileWriteSize = 50 * 1024 * 1024
+
+// resolvePath securely resolves a path within the work directory.
+// ISS-021: Prevents path traversal attacks by:
+// 1. Rejecting absolute paths
+// 2. Cleaning the path to resolve .. traversal
+// 3. Verifying the result is within workDir
+func resolvePath(workDir, path string) (string, error) {
+	// Reject absolute paths
 	if filepath.IsAbs(path) {
-		return path
+		return "", fmt.Errorf("absolute paths not allowed: %s", path)
 	}
-	return filepath.Join(workDir, path)
+
+	// Clean the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+
+	// Reject paths that try to escape via ..
+	if strings.HasPrefix(cleanPath, "..") {
+		return "", fmt.Errorf("path traversal not allowed: %s", path)
+	}
+
+	// Join with workDir and clean again
+	fullPath := filepath.Clean(filepath.Join(workDir, cleanPath))
+
+	// Final check: ensure the resolved path is within workDir
+	if !strings.HasPrefix(fullPath, filepath.Clean(workDir)+string(filepath.Separator)) &&
+		fullPath != filepath.Clean(workDir) {
+		return "", fmt.Errorf("path escapes work directory: %s", path)
+	}
+
+	return fullPath, nil
 }
 
 func errorResponse(id string, code int, message, details string) *ToolResponse {

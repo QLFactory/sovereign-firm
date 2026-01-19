@@ -57,6 +57,9 @@ services:
       - sovereign-net
 
   # 5. Backend (Go Orchestrator + Worker)
+  # ISS-027: Azure API key now loaded from Docker secret file instead of environment variable
+  # This prevents the key from being visible in container inspection or process listing.
+  # Create secrets/azure_openai_api_key.txt with your API key before running.
   backend:
     build:
       context: .
@@ -67,11 +70,14 @@ services:
       - DATABASE_URL=postgres://sovereign:sovereign123@postgres:5432/sovereign_firm?sslmode=disable
       - LLM_PROVIDER=azure
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      # ISS-027: API key loaded from secret file, not environment variable
+      - AZURE_OPENAI_API_KEY_FILE=/run/secrets/azure_openai_api_key
       - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
       - JWT_PRIVATE_KEY_PATH=/app/keys/jwt_rs256.key
       - JWT_PUBLIC_KEY_PATH=/app/keys/jwt_rs256.key.pub
+    secrets:
+      - azure_openai_api_key
     volumes:
       - ./jwt_rs256.key:/app/keys/jwt_rs256.key:ro
       - ./jwt_rs256.key.pub:/app/keys/jwt_rs256.key.pub:ro
@@ -105,3 +111,11 @@ networks:
 
 volumes:
   postgres-data:
+
+# ISS-027: Docker secrets for sensitive credentials
+# Create a 'secrets' directory and add your API key:
+#   mkdir -p secrets
+#   echo "your-api-key-here" > secrets/azure_openai_api_key.txt
+secrets:
+  azure_openai_api_key:
+    file: ./secrets/azure_openai_api_key.txt

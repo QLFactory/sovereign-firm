@@ -280,8 +280,9 @@ Guidelines:
 4. For small projects, use simpler architectures (monolith over microservices)
 5. Always include rationale for tech choices`
 
-	prompt := fmt.Sprintf("Project: %s\n\nRequirements:\n%s\n\nDesign the system architecture.",
-		req.ProjectName, req.Requirements)
+	// ISS-024: Sanitize user input to prevent prompt injection
+	prompt := fmt.Sprintf("Project: %s\n\n%s\n\nDesign the system architecture.",
+		req.ProjectName, SanitizeUserInput("user-requirements", req.Requirements))
 
 	resp, err := a.llmClient.Generate(ctx, llm.GenerateRequest{
 		Prompt: prompt,
