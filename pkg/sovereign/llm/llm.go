@@ -14,8 +14,11 @@ type GenerateRequest struct {
 
 // GenerateResponse defines the output from an LLM
 type GenerateResponse struct {
-	Response string `json:"response"`
-	Done     bool   `json:"done"`
+	Response         string `json:"response"`
+	Done             bool   `json:"done"`
+	PromptTokens     int    `json:"prompt_tokens,omitempty"`
+	CompletionTokens int    `json:"completion_tokens,omitempty"`
+	TotalTokens      int    `json:"total_tokens,omitempty"`
 }
 
 // Client is the sovereign interface for AI providers

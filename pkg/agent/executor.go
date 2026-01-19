@@ -13,10 +13,11 @@ import (
 
 // AgentExecutor handles task execution with tool usage
 type AgentExecutor struct {
-	agent        *AgentInstance
-	toolRegistry *mcp.ToolRegistry
-	socValidator *SOCValidator
-	maxToolCalls int
+	agent            *AgentInstance
+	toolRegistry     *mcp.ToolRegistry
+	socValidator     *SOCValidator
+	maxToolCalls     int
+	maxHistoryLength int // Maximum number of conversation history entries
 }
 
 // NewAgentExecutor creates an executor for an agent
@@ -26,10 +27,11 @@ func NewAgentExecutor(
 	llmClient llm.Client,
 ) *AgentExecutor {
 	return &AgentExecutor{
-		agent:        agent,
-		toolRegistry: toolRegistry,
-		socValidator: NewSOCValidator(llmClient, 3),
-		maxToolCalls: 10, // Prevent infinite tool loops
+		agent:            agent,
+		toolRegistry:     toolRegistry,
+		socValidator:     NewSOCValidator(llmClient, 3),
+		maxToolCalls:     10, // Prevent infinite tool loops
+		maxHistoryLength: 20, // Keep last 20 history entries to prevent context overflow
 	}
 }
 
@@ -58,9 +60,14 @@ func (e *AgentExecutor) ExecuteTask(ctx context.Context, task *Task) (*TaskResul
 			return nil, fmt.Errorf("LLM generation failed: %w", err)
 		}
 
-		// Track token usage
+		// Track token usage - use actual counts if available, otherwise estimate
 		e.agent.mu.Lock()
-		e.agent.TokensUsed += int64(len(resp.Response) / 4) // Rough approximation
+		if resp.TotalTokens > 0 {
+			e.agent.TokensUsed += int64(resp.TotalTokens)
+		} else {
+			// Fallback: estimate ~4 chars per token (rough approximation)
+			e.agent.TokensUsed += int64(len(resp.Response) / 4)
+		}
 		e.agent.mu.Unlock()
 
 		// Check if this is a tool call
@@ -77,6 +84,16 @@ func (e *AgentExecutor) ExecuteTask(ctx context.Context, task *Task) (*TaskResul
 			toolResultStr := mcp.FormatToolResult(toolResp)
 			conversationHistory = append(conversationHistory,
 				fmt.Sprintf("Tool: %s\nResult:\n%s", toolCall.Tool, toolResultStr))
+
+			// Trim history if it exceeds max length (keep first entry which is the original prompt)
+			if len(conversationHistory) > e.maxHistoryLength {
+				// Keep first entry (prompt) + last (maxHistoryLength-1) entries
+				conversationHistory = append(
+					conversationHistory[:1],
+					conversationHistory[len(conversationHistory)-e.maxHistoryLength+1:]...,
+				)
+				log.Printf("Trimmed conversation history for agent %s to %d entries", e.agent.Name, len(conversationHistory))
+			}
 
 			continue
 		}

@@ -135,20 +135,22 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 - **Resolution**: Added `brownfield_status` and `existing_tech_stack` to architect input when brownfield analysis is complete.
 
 ### ISS-013: Fake Token Counting
-- **File**: `pkg/agent/executor.go`
-- **Lines**: 62-64
+- **File**: `pkg/agent/executor.go`, `pkg/sovereign/llm/llm.go`, `pkg/sovereign/llm/azure.go`
+- **Lines**: 61-69
 - **Description**: Token count estimated as `len(resp.Response) / 4`. Not actual token count.
 - **Impact**: Inaccurate billing, context window miscalculation
 - **Fix**: Use actual token count from LLM response
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added token count fields to GenerateResponse. Azure client now extracts usage from API response. Executor uses actual counts when available, falls back to estimate.
 
 ### ISS-014: Unbounded Conversation History
 - **File**: `pkg/agent/executor.go`
-- **Lines**: 49, 78-79
+- **Lines**: 20, 34, 88-96
 - **Description**: Messages appended to conversation history without limit. Never truncated.
 - **Impact**: Memory growth, eventual OOM, context window overflow
 - **Fix**: Implement sliding window or summarization
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: Added `maxHistoryLength` field (default 20). History trimmed to keep original prompt + last N-1 entries when limit exceeded.
 
 ---
 
@@ -304,10 +306,10 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
 | P0 | 8 | 0 | 0 | 8 |
-| P1 | 6 | 2 | 0 | 4 |
+| P1 | 6 | 0 | 0 | 6 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **15** | **0** | **12** |
+| **Total** | **27** | **13** | **0** | **14** |
 
 ---
 

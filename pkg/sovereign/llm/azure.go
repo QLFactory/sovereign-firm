@@ -69,6 +69,11 @@ type azureChatResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 		Code    string `json:"code"`
@@ -134,9 +139,19 @@ func (c *AzureOpenAIClient) Generate(ctx context.Context, req GenerateRequest) (
 		return nil, fmt.Errorf("no response from Azure OpenAI")
 	}
 
-	return &GenerateResponse{
+	genResp := &GenerateResponse{
 		Response: chatResp.Choices[0].Message.Content,
-	}, nil
+		Done:     true,
+	}
+
+	// Include token counts if available
+	if chatResp.Usage != nil {
+		genResp.PromptTokens = chatResp.Usage.PromptTokens
+		genResp.CompletionTokens = chatResp.Usage.CompletionTokens
+		genResp.TotalTokens = chatResp.Usage.TotalTokens
+	}
+
+	return genResp, nil
 }
 
 func (c *AzureOpenAIClient) Embed(ctx context.Context, text string) ([]float32, error) {
