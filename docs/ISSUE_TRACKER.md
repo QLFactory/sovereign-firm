@@ -69,11 +69,12 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 ### ISS-006: No Panic Recovery in Message Processor
 - **File**: `pkg/agent/agent.go`
-- **Lines**: 299-308
+- **Lines**: 308-331
 - **Description**: `processMessages()` goroutine has no defer/recover. Panic crashes entire agent.
 - **Impact**: Single bad message can crash agent and stall workflow
 - **Fix**: Add defer with recover, log panic and continue
-- **Status**: [ ] Open
+- **Status**: [x] **FIXED** - 2026-01-19
+- **Resolution**: New `safeHandleMessage` wrapper with defer/recover. Panics are logged and agent continues processing.
 
 ### ISS-007: Activity Errors Continue Workflow
 - **File**: `pkg/firm/workflows/consultancy.go`
@@ -296,11 +297,11 @@ This document tracks all identified issues from the deep codebase analysis. Issu
 
 | Priority | Total | Open | In Progress | Done |
 |----------|-------|------|-------------|------|
-| P0 | 8 | 3 | 0 | 5 |
+| P0 | 8 | 2 | 0 | 6 |
 | P1 | 6 | 6 | 0 | 0 |
 | P2 | 6 | 6 | 0 | 0 |
 | P3 | 7 | 7 | 0 | 0 |
-| **Total** | **27** | **22** | **0** | **5** |
+| **Total** | **27** | **21** | **0** | **6** |
 
 ---
 

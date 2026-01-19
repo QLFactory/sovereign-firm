@@ -305,16 +305,29 @@ func (a *AgentInstance) SendMessage(msgType MessageType, to, subject string, con
 	}
 }
 
-// processMessages handles incoming messages
+// processMessages handles incoming messages with panic recovery.
+// A panic in message handling won't crash the entire agent.
 func (a *AgentInstance) processMessages() {
 	for {
 		select {
 		case <-a.ctx.Done():
 			return
 		case msg := <-a.Inbox:
-			a.handleMessage(msg)
+			a.safeHandleMessage(msg)
 		}
 	}
+}
+
+// safeHandleMessage wraps handleMessage with panic recovery
+func (a *AgentInstance) safeHandleMessage(msg Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC in agent %s (%s) handling message from %s: %v",
+				a.Name, a.ID, msg.From, r)
+			// Agent continues processing other messages
+		}
+	}()
+	a.handleMessage(msg)
 }
 
 // handleMessage processes a single incoming message
